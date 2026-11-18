@@ -39,8 +39,7 @@ pub fn ensure(app: &AppHandle) -> tauri::Result<()> {
         return Ok(());
     }
 
-    #[allow(unused_mut)]
-    let mut builder = WebviewWindowBuilder::new(app, PILL_LABEL, WebviewUrl::App("pill.html".into()))
+    let builder = WebviewWindowBuilder::new(app, PILL_LABEL, WebviewUrl::App("pill.html".into()))
         .title("IP")
         .inner_size(PILL_WIDTH, PILL_HEIGHT)
         .resizable(false)
@@ -50,13 +49,9 @@ pub fn ensure(app: &AppHandle) -> tauri::Result<()> {
         .skip_taskbar(true)
         .visible(false);
 
-    // 透明窗口在 macOS 上需要 tauri 的 `macos-private-api` feature，方法在该平台不存在，
-    // 因此仅在 Windows 编译进来；本地 macOS 预览会退化为不透明窗口，只用于检查布局。
-    #[cfg(target_os = "windows")]
-    {
-        builder = builder.transparent(true);
-    }
-
+    // 不使用透明窗口：Windows 上 WebView2 + 分层窗口曾出现"内容已渲染但屏幕不可见"
+    // 的问题，改为不透明窗口，由 public/pill.html 自己铺满深色底色，
+    // 代价是四角为直角而非圆角。
     let window = builder.build()?;
 
     place_bottom_right(&window);

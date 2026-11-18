@@ -76,14 +76,18 @@
 | 项 | 取值 | 原因 |
 |---|---|---|
 | 触发 | tag `v*` + `workflow_dispatch` | tag 即版本，天然对齐；手动可补发 |
+| 结构 | `build`(矩阵并行) → `release`(汇总发布) | 关键设计：**任一平台失败都不会留下"只有一半资产"的 Release** |
 | macOS 构建 | `--target universal-apple-darwin --bundles dmg` | 单个 dmg 同时兼容 M 系和 Intel，下载页不用做架构判断 |
 | Windows 构建 | `--bundles nsis,msi` | NSIS 免管理员、单文件，普通用户首选；MSI 给批量分发 |
-| Tauri CLI | `npm i -g @tauri-apps/cli@^2` + `tauriScript: tauri` | 比 `cargo install tauri-cli` 快一个数量级（后者要现编 5~8 分钟） |
+| Tauri CLI | `npm i -g @tauri-apps/cli@^2` | 比 `cargo install tauri-cli` 快一个数量级（后者要现编 5~8 分钟） |
 | 缓存 | `Swatinem/rust-cache@v2`，`workspaces: src-tauri -> target` | target 目录 2~3 GB，冷/热构建差 4 倍以上 |
-| 发布 | `releaseDraft: true` | 先人工验收产物再 publish；确认稳定后可改 `false` |
+| 构建步骤 | shell 里的 `tauri build \| tee build.log` | 不用 tauri-action：CLI 原始报错能进日志，失败时可直接定位 |
+| 失败留痕 | 失败时把日志尾部写入 `$GITHUB_STEP_SUMMARY` | 可观测；避免"只有 exit code 1、没有原因"的黑盒失败 |
+| 产物归档 | `actions/upload-artifact` → `artifacts/download-artifact` | 构建与发布解耦，发布失败可单独重跑 |
+| 发布 | `gh release create/upload --clobber` | 统一 ASCII 命名，重复执行幂等 |
 | 并发 | `concurrency` 按 ref 分组 | 避免重复 tag 触发两次构建互相覆盖 Release |
 
-产物命名（`releaseAssetNamePattern` 生成）：
+产物命名（构建后统一改名，与 `productName` 的中文无关）：
 
 ```
 IPMenuBar_1.2.4_macos-universal.dmg
@@ -91,7 +95,7 @@ IPMenuBar_1.2.4_windows-x64-setup.exe
 IPMenuBar_1.2.4_windows-x64.msi
 ```
 
-## 五、首次接入步骤
+## 五、发版流程
 
 1. 提交 `.github/workflows/`（已生成，直接 commit）。
 2. 确认仓库 Actions 权限：Settings → Actions → General → Workflow permissions 选 **Read and write**（workflow 里虽已声明 `permissions: contents: write`，组织策略可能仍会拦截）。
@@ -99,8 +103,9 @@ IPMenuBar_1.2.4_windows-x64.msi
    ```bash
    git tag v1.2.4 && git push origin v1.2.4
    ```
-4. 进 Actions 看两个 job，完成后去 Releases 找到 **Draft**，下载三件套实测安装。
-5. 验收通过再点 Publish。
+4. 进 Actions 看 `build`（两个平台并行）→ `release`（汇总发布）两个 job。
+5. 全部绿后，Releases 里会直接出现已发布的版本，三个安装包齐备。
+6. 若只想验证编译不发布：推 `main` 即可触发 `Build Check`（`--no-bundle`，不产包、不建 Release）。
 
 ## 六、签名 Secrets 清单（可选，按需启用）
 
