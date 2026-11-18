@@ -1,3 +1,5 @@
+// Windows 端不做默认路由探测（见 get_primary_interface 注释），因此该平台不需要 Command
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::process::Command;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
