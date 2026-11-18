@@ -1,7 +1,9 @@
 name: Release
 
-# 打 tag（如 v1.2.4）即触发多端打包，并创建/更新 GitHub Release（草稿）。
-# 也可在 Actions 页面手动 Run workflow。
+# 打 tag（如 v1.2.4）即触发多端打包；也可在 Actions 页面手动 Run workflow。
+#
+# 结构：build(matrix，各平台并行编译打包) -> release(汇总产物，统一发布)
+# 这样任一平台失败都不会产生"只有一半资产"的 Release。
 on:
   push:
     tags:
@@ -18,9 +20,10 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
+  APP_NAME: IPMenuBar
 
 jobs:
-  release:
+  build:
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.platform }}
     strategy:
@@ -39,12 +42,6 @@ jobs:
             args: --bundles nsis,msi
             rust_targets: ''
             asset_tag: windows-x64
-          # 如需 Linux（AppImage/deb），放开下面这段，并注意 tray title 在 Linux 上依赖 icon 显示
-          # - label: Linux (x64)
-          #   platform: ubuntu-22.04
-          #   args: --bundles appimage,deb
-          #   rust_targets: ''
-          #   asset_tag: linux-x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -96,38 +93,82 @@ jobs:
       - name: Install Tauri CLI
         run: npm install --global @tauri-apps/cli@^2
 
-      - name: Build and upload to Release
-        uses: tauri-apps/tauri-action@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # ---- macOS 签名 + 公证（有 Apple Developer 账号后取消注释）----
-          # 证书导出：钥匙串导出 .p12 -> openssl base64 -A 后写入 Secrets
-          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          # 公证二选一：App Store Connect API Key（推荐）或 Apple ID
-          # APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          # APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          # APPLE_API_KEY_PATH: ${{ secrets.APPLE_API_KEY_PATH }}
-          # APPLE_ID: ${{ secrets.APPLE_ID }}
-          # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      # 用 shell 步骤而不是 tauri-action：CLI 的原始报错能进日志，
+      # 失败时还能被下面的步骤收进 job summary 直接查。
+      - name: Build bundles
+        shell: bash
+        run: |
+          set -o pipefail
+          tauri build ${{ matrix.args }} 2>&1 | tee build.log
+
+      - name: Dump build log on failure
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo '### tauri build 失败（最后 60 行）'
+            echo '```'
+            tail -n 60 build.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # 产物统一改成 ASCII 名：productName 是中文「ip地址」，默认文件名在
+      # Release 下载 URL 里会被 percent-encode，脚本/下载器容易出问题。
+      - name: Stage assets with ASCII names
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          VER=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          while IFS= read -r f; do
+            case "$f" in
+              *.dmg) cp "$f" "dist/${APP_NAME}_${VER}_${{ matrix.asset_tag }}.dmg" ;;
+              *.msi) cp "$f" "dist/${APP_NAME}_${VER}_${{ matrix.asset_tag }}.msi" ;;
+              *setup.exe) cp "$f" "dist/${APP_NAME}_${VER}_${{ matrix.asset_tag }}-setup.exe" ;;
+              *) echo "skip $f" ;;
+            esac
+          done < <(find src-tauri/target -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*setup.exe' \))
+          ls -lh dist
+
+      - name: Upload artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
         with:
-          projectPath: .
-          # 本项目是纯 Rust + 静态前端，没有 package.json，直接用全局 tauri CLI
-          tauriScript: tauri
-          args: ${{ matrix.args }}
-          tagName: v__VERSION__
-          releaseName: 'IPMenuBar v__VERSION__'
-          releaseBody: |
-            ### 安装说明
-            - **macOS（Apple Silicon / Intel 通用）**：下载 `.dmg`，拖入 Applications 即可。
-            - **Windows x64**：优先使用 `-setup.exe`（单文件、免管理员）；`.msi` 适合域内批量分发。
-            - 本版本使用 ad-hoc 签名（未购买 Apple Developer 证书）：macOS 首次打开请「右键 → 打开」，或在 系统设置 → 隐私与安全性 中点击「仍要打开」；Windows 可能触发 SmartScreen 提示，选择「更多信息 → 仍要运行」。
-          # 自动创建并发布 Release；若需要人工验收后再发布，改回 true 即可
-          releaseDraft: false
-          prerelease: false
-          # 资产统一用 ASCII 命名：productName 是中文「ip地址」，默认产物名会在
-          # Release 下载 URL 里被 percent-encode，脚本/下载器容易出问题。
-          releaseAssetNamePattern: 'IPMenuBar_[version]_${{ matrix.asset_tag }}[setup][ext]'
-          retryAttempts: 2
+          name: ${{ matrix.asset_tag }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VER=$(python3 -c "import json;print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
+          TAG="v${VER}"
+          echo "发布 ${TAG}"
+          ls -lh dist
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release 已存在，改为覆盖上传"
+            gh release edit "$TAG" --draft=false --title "${APP_NAME} ${TAG}" --notes-file .github/release-notes.md
+          else
+            gh release create "$TAG" \
+              --target "$GITHUB_SHA" \
+              --title "${APP_NAME} ${TAG}" \
+              --notes-file .github/release-notes.md
+          fi
+          gh release upload "$TAG" dist/* --clobber
+          echo "---- 最终资产 ----"
+          gh release view "$TAG" --json assets --jq '.assets[].name'
