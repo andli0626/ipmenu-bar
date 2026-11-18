@@ -1,7 +1,9 @@
 # Git 仓库初始化与推送说明
 
 > 记录本次将本地 `ipmenu-bar` 项目提交并推送到 `https://github.com/andli0626/ipmenu-bar.git` 的完整改动与解决方案。
-> 执行时间：2026-11-18　｜　提交：`4a943c1`　｜　分支：`main`
+> 执行时间：2026-11-18　｜　提交：`4a943c1`（首推）→ `875d921`（本文档）　｜　分支：`main`
+>
+> 配套网页版：同目录 `Git首推操作报告.html`，浏览器直接打开即可（含实拍截图与版式化排版）。
 
 ---
 
@@ -137,6 +139,24 @@ git push -u origin main
 #  * [new branch]      main -> main
 # branch 'main' set up to track 'origin/main'.
 ```
+
+### 步骤 5.1 关键画面（实拍）
+
+以下三张截图取自当时的浏览器与终端，对应三个节点：仓库已落地、身份已登记、本地与远程同哈希。原图保存在 `docs/images/`。
+
+**① 仓库首页：`main` 分支、4 个提交、文件树就位**
+
+![仓库首页](images/01-github-repo.png)
+
+**② SSH keys 列表：密钥已登记，权限 Read/write**
+
+![SSH 密钥登记](images/02-github-ssh-keys.png)
+
+**③ 终端校验：`git log` / `git ls-remote` / `git status` 三条只读命令**
+
+![终端校验](images/03-terminal-git-check.png)
+
+> 图片说明：截图均为操作完成后的真实画面，未作修饰；第 ③ 张在新建的终端窗口中执行只读命令生成，未改动仓库状态。
 
 ---
 
