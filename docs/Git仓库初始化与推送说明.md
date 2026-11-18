@@ -355,6 +355,8 @@ $ git status -sb
 | `4a943c1` | `chore: 初始化 ipmenu-bar 项目（Tauri 菜单栏 IP 工具）` | 首推：32 个文件、8730 行 |
 | `b30471f` | `docs: 补充 Git 仓库初始化与推送说明` | 新增本文档 |
 | `c3a928a` | `chore: 修正 .gitignore（target 路径对齐 + Cargo.lock 豁免）并纳入 Cargo.lock` | 落实 7.1 / 7.2；入库 `Cargo.lock`（5221 行），仓库文件数由 32 → 34 |
+| `875d921` | `docs: 更新 .gitignore 两项修复状态与变更记录` | 7.1 / 7.2 标记为已修复，新增本节 |
+| `04ff8e2` | `docs: 补充操作截图并新增网页版操作报告` | 新增 `docs/images/` 三张实拍截图与 `Git首推操作报告.html` |
 
 > 注：第六节的「32 个文件」指首推提交 `4a943c1` 的范围，为历史记录，不再随后续提交变动。
 
