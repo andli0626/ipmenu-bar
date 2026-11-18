@@ -124,7 +124,8 @@ jobs:
             - **macOS（Apple Silicon / Intel 通用）**：下载 `.dmg`，拖入 Applications 即可。
             - **Windows x64**：优先使用 `-setup.exe`（单文件、免管理员）；`.msi` 适合域内批量分发。
             - 本版本使用 ad-hoc 签名（未购买 Apple Developer 证书）：macOS 首次打开请「右键 → 打开」，或在 系统设置 → 隐私与安全性 中点击「仍要打开」；Windows 可能触发 SmartScreen 提示，选择「更多信息 → 仍要运行」。
-          releaseDraft: true
+          # 自动创建并发布 Release；若需要人工验收后再发布，改回 true 即可
+          releaseDraft: false
           prerelease: false
           # 资产统一用 ASCII 命名：productName 是中文「ip地址」，默认产物名会在
           # Release 下载 URL 里被 percent-encode，脚本/下载器容易出问题。
