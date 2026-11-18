@@ -51,6 +51,12 @@ cargo tauri dev
 
 ## 构建发布包
 
+> 推荐用 CI：打个 tag 就自动产出 macOS(universal dmg) + Windows(nsis + msi) 并发布到 Releases。
+> - 运维手册（怎么发版、怎么排错）：[docs/GitHub-Actions多端打包指南.md](docs/GitHub-Actions多端打包指南.md)
+> - 实现过程复盘（为什么这么设计、当时踩了什么坑）：[docs/多端自动打包实现过程说明.md](docs/多端自动打包实现过程说明.md)
+>
+> 本地出 mac dmg 需前置 `CI=true`，否则会卡在 dmg 的 Finder 美化脚本。
+
 ### macOS (.app + .dmg)
 
 ```bash
