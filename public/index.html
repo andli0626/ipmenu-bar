@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ip地址</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 12px 14px;
+            user-select: none;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .header h1 {
+            font-size: 15px;
+            font-weight: 600;
+            color: #64ffda;
+            letter-spacing: 1px;
+        }
+        .ip-section {
+            margin-bottom: 10px;
+        }
+        .section-title {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+        .ip-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 9px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: border-color 0.2s;
+        }
+        .ip-card:hover {
+            border-color: rgba(100,255,218,0.3);
+        }
+        .ip-value {
+            font-size: 17px;
+            font-weight: 600;
+            color: #fff;
+            font-family: 'Consolas', 'Monaco', monospace;
+            letter-spacing: 0.5px;
+        }
+        .ip-value.loading {
+            color: #888;
+            font-size: 13px;
+            font-weight: normal;
+        }
+        .copy-btn {
+            background: rgba(100,255,218,0.1);
+            border: 1px solid rgba(100,255,218,0.3);
+            color: #64ffda;
+            padding: 4px 11px;
+            border-radius: 7px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.2s;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .copy-btn:hover {
+            background: rgba(100,255,218,0.2);
+            border-color: #64ffda;
+        }
+        .copy-btn.copied {
+            background: rgba(100,255,218,0.3);
+            border-color: #64ffda;
+        }
+        .local-list {
+            list-style: none;
+        }
+        .local-item {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            padding: 6px 10px;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .local-item .iface {
+            flex: 1 1 auto;
+            min-width: 0;
+            font-size: 11px;
+            color: #888;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .local-item .ip {
+            flex-shrink: 0;
+            font-size: 13px;
+            color: #ccc;
+            font-family: 'Consolas', 'Monaco', monospace;
+            white-space: nowrap;
+        }
+        /* 无线网卡（WLAN）/ 默认路由主网卡：青色描边+底色+轻发光，与普通虚拟网卡区分 */
+        .local-item.wifi, .local-item.primary {
+            background: rgba(100, 255, 218, 0.12);
+            border-color: rgba(100, 255, 218, 0.55);
+            box-shadow: 0 0 8px rgba(100, 255, 218, 0.18), inset 0 0 0 1px rgba(100, 255, 218, 0.08);
+        }
+        .local-item.wifi .iface, .local-item.primary .iface {
+            color: #64ffda;
+            font-weight: 600;
+        }
+        .local-item.wifi .ip {
+            color: #64ffda;
+            font-size: 14px;
+            font-weight: 700;
+        }
+        /* 默认路由主网卡（当前本地 IP）：沿用高亮配色并加“主”标签 */
+        .local-item.primary .ip {
+            color: #64ffda;
+            font-size: 14px;
+            font-weight: 700;
+        }
+        .primary-tag {
+            flex-shrink: 0;
+            font-style: normal;
+            font-size: 10px;
+            line-height: 1;
+            color: #1a1a2e;
+            background: rgba(100, 255, 218, 0.85);
+            border-radius: 5px;
+            padding: 3px 5px;
+            font-weight: 700;
+        }
+        /* “无线”小标签 */
+        .wifi-tag {
+            flex-shrink: 0;
+            font-style: normal;
+            font-size: 10px;
+            line-height: 1;
+            color: #64ffda;
+            border: 1px solid rgba(100, 255, 218, 0.45);
+            border-radius: 5px;
+            padding: 3px 5px;
+        }
+        .refresh-btn {
+            display: block;
+            width: 100%;
+            margin-top: 8px;
+            padding: 8px;
+            background: rgba(100,255,218,0.08);
+            border: 1px solid rgba(100,255,218,0.2);
+            color: #64ffda;
+            border-radius: 9px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .refresh-btn:hover {
+            background: rgba(100,255,218,0.15);
+        }
+        .empty-state {
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            padding: 10px;
+        }
+        /* 底部信息栏：关于入口 + 版本号（非核心区，弱化展示） */
+        .footer-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 6px;
+            padding: 0 2px;
+            font-size: 11px;
+        }
+        .about-link {
+            cursor: pointer;
+            color: #7a8a98;
+            transition: color 0.2s;
+        }
+        .about-link:hover {
+            color: #64ffda;
+        }
+        .version {
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: #5d7a74;
+        }
+        /* 关于弹窗 */
+        .modal-mask {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.55);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            backdrop-filter: blur(2px);
+        }
+        .modal-mask.show {
+            display: flex;
+        }
+        .modal-card {
+            width: 268px;
+            background: linear-gradient(160deg, #1e2a44 0%, #16213e 100%);
+            border: 1px solid rgba(100, 255, 218, 0.3);
+            border-radius: 14px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            padding: 20px 18px 16px;
+            text-align: center;
+        }
+        .modal-logo {
+            width: 46px;
+            height: 46px;
+            margin: 0 auto 10px;
+            border-radius: 12px;
+            background: rgba(100, 255, 218, 0.12);
+            border: 1px solid rgba(100, 255, 218, 0.4);
+            color: #64ffda;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #fff;
+        }
+        .modal-version {
+            margin-top: 3px;
+            font-size: 12px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: #64ffda;
+        }
+        .modal-desc {
+            margin: 10px 0 6px;
+            font-size: 12px;
+            line-height: 1.7;
+            color: #8a96a8;
+        }
+        .modal-meta {
+            margin-bottom: 14px;
+            font-size: 10px;
+            color: #5a6a78;
+        }
+        .modal-close {
+            width: 100%;
+            padding: 7px;
+            background: rgba(100, 255, 218, 0.1);
+            border: 1px solid rgba(100, 255, 218, 0.3);
+            color: #64ffda;
+            border-radius: 9px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+        .modal-close:hover {
+            background: rgba(100, 255, 218, 0.2);
+        }
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(100,255,218,0.9);
+            color: #1a1a2e;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        .toast.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>IP 地址信息</h1>
+    </div>
+
+    <div class="ip-section">
+        <div class="section-title">公网 IP</div>
+        <div class="ip-card">
+            <span class="ip-value loading" id="public-ip">正在获取...</span>
+            <button class="copy-btn" id="copy-public" data-ip="">复制</button>
+        </div>
+    </div>
+
+    <div class="ip-section">
+        <div class="section-title">本地 IP</div>
+        <ul class="local-list" id="local-ips">
+            <li class="empty-state">正在扫描网络接口...</li>
+        </ul>
+    </div>
+
+    <button class="refresh-btn" id="refresh-btn">刷新</button>
+
+    <div class="footer-bar">
+        <span class="about-link" id="about-btn">关于</span>
+        <span class="version" id="app-version">v-</span>
+    </div>
+
+    <div class="modal-mask" id="about-modal">
+        <div class="modal-card">
+            <div class="modal-logo">IP</div>
+            <div class="modal-title">IP 地址信息</div>
+            <div class="modal-version" id="about-version">v-</div>
+            <div class="modal-desc">跨平台菜单栏 IP 地址查看工具<br>公网 IP 多源获取<br>本地网卡 IP 一键复制</div>
+            <div class="modal-meta">Powered by Tauri + Rust</div>
+            <button class="modal-close" id="about-close">知道了</button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const { invoke } = window.__TAURI__.core;
+
+        // 单独加载公网 IP；失败只影响公网卡，不再阻塞本地网卡列表
+        async function loadPublicIp() {
+            const publicEl = document.getElementById('public-ip');
+            const copyBtn = document.getElementById('copy-public');
+
+            publicEl.textContent = '正在获取...';
+            publicEl.classList.add('loading');
+            copyBtn.dataset.ip = '';
+
+            try {
+                const ip = await invoke('get_public_ip');
+                if (ip) {
+                    publicEl.textContent = ip;
+                    copyBtn.dataset.ip = ip;
+                } else {
+                    publicEl.textContent = '获取失败';
+                }
+            } catch (e) {
+                publicEl.textContent = '获取失败';
+            } finally {
+                publicEl.classList.remove('loading');
+            }
+        }
+
+        // 单独加载本地网卡列表，系统调用很快，可立即渲染
+        async function loadLocalIfaces() {
+            const localList = document.getElementById('local-ips');
+            localList.innerHTML = '<li class="empty-state">正在扫描网络接口...</li>';
+
+            try {
+                const list = await invoke('get_local_ifaces');
+                if (list && list.length > 0) {
+                    // 识别无线网卡：Windows 多为 WLAN/WLAN 2，另有 Wi-Fi、中文“无线”、Linux wlan0
+                    // primary 为后端按默认路由判定的主网卡（当前本地 IP），固定排在列表首位
+                    localList.innerHTML = list.map((item) => {
+                        const isWifi = /wlan|wi-?fi|无线/i.test(item.name);
+                        const cls = ['local-item'];
+                        if (isWifi) cls.push('wifi');
+                        if (item.primary) cls.push('primary');
+                        const tags =
+                            (item.primary ? '<i class="primary-tag">主IP</i>' : '') +
+                            (isWifi ? '<i class="wifi-tag">无线</i>' : '');
+                        return `<li class="${cls.join(' ')}">
+                            <span class="iface" title="${item.name}">${item.name}</span>
+                            ${tags}
+                            <span class="ip">${item.ip}</span>
+                            <button class="copy-btn" data-ip="${item.ip}">复制</button>
+                        </li>`;
+                    }).join('');
+                } else {
+                    localList.innerHTML = '<li class="empty-state">未找到网络接口</li>';
+                }
+            } catch (e) {
+                localList.innerHTML = `<li class="empty-state">扫描失败: ${e}</li>`;
+            }
+        }
+
+        // 公网/本地并行加载、各自独立处理失败
+        function fetchAndDisplay() {
+            loadPublicIp();
+            loadLocalIfaces();
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 1500);
+        }
+
+        async function copyIp(ip) {
+            if (!ip) return;
+            try {
+                await window.__TAURI__.clipboard.writeText(ip);
+                showToast('已复制: ' + ip);
+            } catch (e) {
+                // Fallback: use navigator clipboard
+                try {
+                    await navigator.clipboard.writeText(ip);
+                    showToast('已复制: ' + ip);
+                } catch (e2) {
+                    showToast('复制失败');
+                }
+            }
+        }
+
+        // Event delegation for copy buttons
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('copy-btn')) {
+                const ip = e.target.dataset.ip;
+                if (ip) {
+                    copyIp(ip);
+                    e.target.classList.add('copied');
+                    setTimeout(() => e.target.classList.remove('copied'), 1000);
+                }
+            }
+        });
+
+        document.getElementById('refresh-btn').addEventListener('click', fetchAndDisplay);
+
+        // ---- 关于弹窗 ----
+        const aboutModal = document.getElementById('about-modal');
+
+        // 打开"关于"对话框
+        function openAbout() {
+            aboutModal.classList.add('show');
+        }
+
+        // 关闭"关于"对话框
+        function closeAbout() {
+            aboutModal.classList.remove('show');
+        }
+
+        document.getElementById('about-btn').addEventListener('click', openAbout);
+        document.getElementById('about-close').addEventListener('click', closeAbout);
+        // 点击遮罩空白处或按 Esc 关闭
+        aboutModal.addEventListener('click', (e) => {
+            if (e.target === aboutModal) closeAbout();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeAbout();
+        });
+
+        // 版本号从后端命令获取（数据源为 Cargo.toml 的 package.version）
+        invoke('get_app_version').then((v) => {
+            const text = 'v' + v;
+            document.getElementById('app-version').textContent = text;
+            document.getElementById('about-version').textContent = text;
+        }).catch(() => {});
+
+        // 托盘菜单点击"关于"时，后端 emit 事件唤起弹窗
+        window.__TAURI__.event.listen('show-about', openAbout);
+
+        // Auto-fetch on load
+        fetchAndDisplay();
+    </script>
+</body>
+</html>
