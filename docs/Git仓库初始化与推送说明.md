@@ -184,9 +184,11 @@ git push -u origin main
 
 ## 七、遗留问题与建议
 
-### 7.1 【建议修复】`.gitignore` 的 target 路径与实际目录不匹配
+### 7.1 【已修复】`.gitignore` 的 target 路径与实际目录不匹配
 
-项目 `.gitignore` 中写的是：
+> 状态：已在提交 `c3a928a` 修复并推送。
+
+项目 `.gitignore` 原写作：
 
 ```gitignore
 desktop/src-tauri/target/
@@ -194,7 +196,7 @@ desktop/src-tauri/target/
 
 而项目实际结构是仓库根目录下直接为 `src-tauri/`（没有 `desktop/` 中间层）。因此这条规则**匹配不到** `src-tauri/target/`。
 
-实际验证结果（当前之所以没出问题，是另有原因）：
+当时未暴露问题的原因（验证结果）：
 
 ```text
 $ git check-ignore -v src-tauri/target/debug/foo
@@ -205,23 +207,47 @@ $ git check-ignore -v src-tauri/target/debug/foo
 
 **风险**：项目安全依赖了「个人全局配置」这一本机环境——换机器、CI 环境或他人克隆后不会继承该配置；届时执行 `cargo tauri build` 生成数 GB 的 `src-tauri/target/`，`git add -A` 会把整个构建产物入库，造成仓库暴涨、推送失败。
 
-**修复方式**（在项目 `.gitignore` 中补充，让规则自洽）：
+**已采用的修复**（写入项目 `.gitignore`，让规则自洽，不再依赖个人环境）：
 
 ```gitignore
-src-tauri/target/
+# Rust / Tauri build artifacts
 target/
+src-tauri/target/
 ```
 
-### 7.2 【建议修复】`*.lock` 误伤 `Cargo.lock`
+修复后验证：
+
+```text
+$ git check-ignore -v src-tauri/target/debug/foo
+.gitignore:36:src-tauri/target/	src-tauri/target/debug/foo
+```
+
+项目规则命中，脱离对 `~/.gitignore_global` 的依赖。
+
+### 7.2 【已修复】`*.lock` 误伤 `Cargo.lock`
+
+> 状态：已在提交 `c3a928a` 修复，并将 `src-tauri/Cargo.lock` 纳入版本控制。
 
 `.gitignore` 中 macOS 段落的 `*.lock` 会连带忽略 `src-tauri/Cargo.lock`。对**应用类**（非 library）Rust 项目，`Cargo.lock` 应当入库，以保证不同机器构建时依赖版本一致、可复现。
 
-**修复方式**：
+**已采用的修复**：
 
 ```gitignore
 *.lock
+# Cargo.lock 是应用类 Rust 项目应入库的依赖锁文件，此处豁免
 !Cargo.lock
 ```
+
+修复后验证（无输出即表示不再被忽略）：
+
+```text
+$ git check-ignore -v src-tauri/Cargo.lock
+（未命中忽略规则）
+
+$ git status -sb
+?? src-tauri/Cargo.lock        # 变为待跟踪文件
+```
+
 
 ### 7.3 【文档一致性】README 目录结构与实际不一致
 
@@ -299,6 +325,18 @@ $ git status -sb
 ```
 
 远程 `HEAD`、`refs/heads/main` 与本地提交哈希三方一致，说明推送内容完整、无分叉。
+
+---
+
+## 十一、后续变更记录
+
+| 提交 | 内容 | 说明 |
+|---|---|---|
+| `4a943c1` | `chore: 初始化 ipmenu-bar 项目（Tauri 菜单栏 IP 工具）` | 首推：32 个文件、8730 行 |
+| `b30471f` | `docs: 补充 Git 仓库初始化与推送说明` | 新增本文档 |
+| `c3a928a` | `chore: 修正 .gitignore（target 路径对齐 + Cargo.lock 豁免）并纳入 Cargo.lock` | 落实 7.1 / 7.2；入库 `Cargo.lock`（5221 行），仓库文件数由 32 → 34 |
+
+> 注：第六节的「32 个文件」指首推提交 `4a943c1` 的范围，为历史记录，不再随后续提交变动。
 
 ---
 
