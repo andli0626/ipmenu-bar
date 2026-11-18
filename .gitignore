@@ -26,9 +26,11 @@ Carthage/Build/
 .DS_Store
 *.swp
 *.lock
+# Cargo.lock 是应用类 Rust 项目应入库的依赖锁文件，此处豁免
+!Cargo.lock
 *.xcuserstate
 *.xcworkspace/xcuserdata/
 
 # Rust / Tauri build artifacts
-desktop/src-tauri/target/
-
+target/
+src-tauri/target/
