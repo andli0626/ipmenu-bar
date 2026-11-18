@@ -85,9 +85,12 @@ pub fn create_tray(app: &AppHandle) -> Result<TrayIcon, Box<dyn std::error::Erro
             } = event
             {
                 let app_handle = tray.app_handle().clone();
+                let worker = app_handle.clone();
                 std::thread::spawn(move || {
-                    update_public_ip(&app_handle);
+                    update_public_ip(&worker);
                 });
+                // Windows：左键点击同时唤出 IP 浮窗（浮窗被收起后的唯一唤出入口）
+                crate::pill::show(&app_handle);
             }
         });
 
@@ -268,6 +271,8 @@ fn spawn_network_monitor(app: AppHandle) {
                         *last = new_primary_ip.clone();
                     }
                 }
+                // 网络切换后同步 Windows 浮窗显示，避免与托盘标题不一致
+                crate::pill::broadcast(&app2, &new_primary_ip);
             }
             if snapshot_changed {
                 rebuild_menu_and_state(&app2, &fresh);
@@ -366,9 +371,10 @@ fn update_public_ip(app: &AppHandle) {
             // Store in state
             if let Some(state) = app.try_state::<AppState>() {
                 if let Ok(mut ip) = state.current_ip.lock() {
-                    *ip = public_ip;
+                    *ip = public_ip.clone();
                 }
             }
+            crate::pill::broadcast(app, &public_ip);
         }
         Err(_) => {
             if let Some(tray) = app.tray_by_id("main-tray") {
@@ -379,6 +385,7 @@ fn update_public_ip(app: &AppHandle) {
                     *ip = String::new();
                 }
             }
+            crate::pill::broadcast(app, "");
         }
     }
 }
@@ -409,8 +416,9 @@ fn select_local_ip(app: &AppHandle, index: usize) {
         // Store in state
         if let Some(state) = app.try_state::<AppState>() {
             if let Ok(mut stored_ip) = state.current_ip.lock() {
-                *stored_ip = ip;
+                *stored_ip = ip.clone();
             }
         }
+        crate::pill::broadcast(app, &ip);
     }
 }

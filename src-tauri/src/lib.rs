@@ -1,4 +1,5 @@
 mod ip;
+mod pill;
 mod tray;
 
 use tauri::Manager;
@@ -55,6 +56,21 @@ fn copy_to_clipboard(app_handle: tauri::AppHandle, text: String) -> Result<(), S
         .map_err(|e| e.to_string())
 }
 
+/// 返回当前展示的 IP（托盘中当前显示的那一条）。
+///
+/// Windows 浮窗（pill）首次加载时调用，避免依赖"事件早于监听注册"的时序。
+#[tauri::command]
+fn get_current_ip(app_handle: tauri::AppHandle) -> String {
+    match app_handle.try_state::<tray::AppState>() {
+        Some(state) => state
+            .current_ip
+            .lock()
+            .map(|ip| ip.clone())
+            .unwrap_or_default(),
+        None => String::new(),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -67,6 +83,7 @@ pub fn run() {
             get_public_ip,
             get_local_ifaces,
             get_app_version,
+            get_current_ip,
             copy_to_clipboard
         ]);
 
@@ -85,6 +102,12 @@ pub fn run() {
 
         // Create the tray
         let _tray = tray::create_tray(app.handle())?;
+
+        // Windows 端托盘无法显示文字，创建一个常驻 IP 浮窗；macOS 不创建。
+        // 失败只影响浮窗，不应阻断应用启动。
+        if let Err(e) = pill::ensure(app.handle()) {
+            eprintln!("create ip pill window failed: {e}");
+        }
 
         // Auto-show the main window on launch so user sees IP info immediately
         if let Some(window) = app.get_webview_window("main") {

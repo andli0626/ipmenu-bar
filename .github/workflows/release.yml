@@ -1,0 +1,132 @@
+name: Release
+
+# 打 tag（如 v1.2.4）即触发多端打包，并创建/更新 GitHub Release（草稿）。
+# 也可在 Actions 页面手动 Run workflow。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  release:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS：一次编译出 arm64 + x64 通用二进制，产出单个 dmg
+          - label: macOS (universal)
+            platform: macos-latest
+            args: --target universal-apple-darwin --bundles dmg
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+            asset_tag: macos-universal
+          # Windows：NSIS 安装包（setup.exe，免管理员）+ MSI
+          - label: Windows (x64)
+            platform: windows-latest
+            args: --bundles nsis,msi
+            rust_targets: ''
+            asset_tag: windows-x64
+          # 如需 Linux（AppImage/deb），放开下面这段，并注意 tray title 在 Linux 上依赖 icon 显示
+          # - label: Linux (x64)
+          #   platform: ubuntu-22.04
+          #   args: --bundles appimage,deb
+          #   rust_targets: ''
+          #   asset_tag: linux-x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # 版本号是双源（Cargo.toml + tauri.conf.json），必须在打包前强校验，
+      # 否则会出现「关于」里显示旧版本、安装包文件名是新版本的情况。
+      - name: Verify version consistency
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONF_VER=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          CARGO_VER=$(grep -m1 -E '^version[[:space:]]*=' src-tauri/Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "tauri.conf.json = ${CONF_VER} / Cargo.toml = ${CARGO_VER}"
+          if [ "${CONF_VER}" != "${CARGO_VER}" ]; then
+            echo "::error::版本号不一致：tauri.conf.json=${CONF_VER}，Cargo.toml=${CARGO_VER}"
+            exit 1
+          fi
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG_VER="${GITHUB_REF_NAME#v}"
+            if [ "${TAG_VER}" != "${CONF_VER}" ]; then
+              echo "::error::tag ${GITHUB_REF_NAME} 与 tauri.conf.json 版本 ${CONF_VER} 不一致"
+              exit 1
+            fi
+          fi
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.asset_tag }}
+          cache-on-failure: true
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+
+      - name: Install Tauri CLI
+        run: npm install --global @tauri-apps/cli@^2
+
+      - name: Build and upload to Release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # ---- macOS 签名 + 公证（有 Apple Developer 账号后取消注释）----
+          # 证书导出：钥匙串导出 .p12 -> openssl base64 -A 后写入 Secrets
+          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # 公证二选一：App Store Connect API Key（推荐）或 Apple ID
+          # APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          # APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          # APPLE_API_KEY_PATH: ${{ secrets.APPLE_API_KEY_PATH }}
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          projectPath: .
+          # 本项目是纯 Rust + 静态前端，没有 package.json，直接用全局 tauri CLI
+          tauriScript: tauri
+          args: ${{ matrix.args }}
+          tagName: v__VERSION__
+          releaseName: 'IPMenuBar v__VERSION__'
+          releaseBody: |
+            ### 安装说明
+            - **macOS（Apple Silicon / Intel 通用）**：下载 `.dmg`，拖入 Applications 即可。
+            - **Windows x64**：优先使用 `-setup.exe`（单文件、免管理员）；`.msi` 适合域内批量分发。
+            - 本版本使用 ad-hoc 签名（未购买 Apple Developer 证书）：macOS 首次打开请「右键 → 打开」，或在 系统设置 → 隐私与安全性 中点击「仍要打开」；Windows 可能触发 SmartScreen 提示，选择「更多信息 → 仍要运行」。
+          releaseDraft: true
+          prerelease: false
+          # 资产统一用 ASCII 命名：productName 是中文「ip地址」，默认产物名会在
+          # Release 下载 URL 里被 percent-encode，脚本/下载器容易出问题。
+          releaseAssetNamePattern: 'IPMenuBar_[version]_${{ matrix.asset_tag }}[setup][ext]'
+          retryAttempts: 2

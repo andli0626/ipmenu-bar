@@ -1,0 +1,78 @@
+name: Build Check
+
+# 日常提交/PR 的编译校验：只验证能编过、配置合法，不做打包、不发布。
+# 用 --no-bundle 跳过安装包生成，比 release 工作流快一半左右。
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src-tauri/**'
+      - 'public/**'
+      - '.github/workflows/**'
+
+concurrency:
+  group: build-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  check:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS
+            platform: macos-latest
+            args: --no-bundle
+            rust_targets: ''
+            cache_key: macos
+          - label: Windows
+            platform: windows-latest
+            args: --no-bundle
+            rust_targets: ''
+            cache_key: windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Check version consistency
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONF_VER=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          CARGO_VER=$(grep -m1 -E '^version[[:space:]]*=' src-tauri/Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ "${CONF_VER}" != "${CARGO_VER}" ]; then
+            echo "::error::版本号不一致：tauri.conf.json=${CONF_VER}，Cargo.toml=${CARGO_VER}"
+            exit 1
+          fi
+          echo "version = ${CONF_VER}"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.cache_key }}
+          cache-on-failure: true
+
+      - name: Install Tauri CLI
+        run: npm install --global @tauri-apps/cli@^2
+
+      - name: Build (no bundling)
+        run: tauri build ${{ matrix.args }}
+        working-directory: .

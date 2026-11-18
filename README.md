@@ -8,6 +8,7 @@
 - **本地 IP** — 枚举网络接口，显示本地 IP 列表
 - **复制到剪贴板** — 一键复制当前显示的 IP
 - **托盘原生** — 无窗口、无 Dock 图标，驻留系统托盘/菜单栏
+- **Windows 常驻浮窗** — Windows 通知区域不支持在图标旁显示文字，改用右下角常驻小窗显示 IP（点击复制、可收起，点托盘图标唤回）
 - **即时刷新** — 左键点击托盘图标刷新公网 IP
 
 ## 项目结构
@@ -19,13 +20,15 @@ desktop/
 │   │   ├── main.rs             # 入口点
 │   │   ├── lib.rs              # Tauri builder 和初始化
 │   │   ├── tray.rs             # 系统托盘创建与菜单事件处理
+│   │   ├── pill.rs             # Windows 端常驻 IP 浮窗(其他平台不创建)
 │   │   └── ip.rs               # IP 获取逻辑(公网 + 本地)
 │   ├── icons/                  # 应用图标(各尺寸 PNG)
 │   ├── Cargo.toml              # Rust 依赖配置
 │   ├── build.rs                # Tauri 构建脚本
 │   └── tauri.conf.json         # Tauri 配置文件
 ├── public/
-│   └── index.html              # 最小化前端(托盘应用)
+│   ├── index.html              # 最小化前端(主窗口)
+│   └── pill.html               # Windows 常驻浮窗前端
 └── README.md                   # 本文件
 ```
 
@@ -86,8 +89,9 @@ cargo tauri build
 - 输出 `.app` Bundle 和可选的 `.dmg` 安装镜像
 
 ### Windows
-- 显示在系统托盘通知区域
-- 输出 `.msi` 安装包
+- 显示在系统托盘通知区域，IP 由右下角的常驻浮窗展示（`TrayIcon::set_title` 在 Windows 上不被支持）
+- 浮窗可拖动、点击复制、点「×」收起；再次左键点击托盘图标即可唤回
+- 输出 `.msi` 与 `-setup.exe`（NSIS）两种安装包，后者免管理员权限
 
 ## License
 
