@@ -1,6 +1,6 @@
 [package]
 name = "ipmenubar"
-version = "1.2.4"
+version = "1.2.5"
 description = "A cross-platform menu bar app that displays your IP address"
 authors = ["IPMenuBar"]
 edition = "2021"
