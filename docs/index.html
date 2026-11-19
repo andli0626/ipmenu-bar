@@ -5,30 +5,51 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>IPMenuBar v1.2.5 · 菜单栏里的 IP 地址</title>
 <meta name="description" content="IPMenuBar 是一个常驻 macOS 菜单栏与 Windows 通知区域的小工具：公网 IP 一眼可见，本地网卡一键复制。Tauri 2 + Rust 构建，免安装依赖，安装包同源下载。">
+<meta name="theme-color" content="#0a0c11">
 <link rel="icon" href="assets/icon.png">
 <style>
-/* ============ 基础变量 ============ */
+/* ==========================================================================
+   0. 设计令牌
+   浅色区沿用 Apple 系统灰阶（#f5f5f7 / #d2d2d7 / #86868b / #1d1d1f）；
+   深色区与应用真实配色对齐（窗口底 #131526，强调色 #59ffd1）。
+   ========================================================================== */
 :root{
-  --ink:#080b14;
-  --ink-soft:#0e1322;
-  --ink-line:rgba(255,255,255,.09);
-  --mint:#4ade9e;
-  --mint-deep:#16a876;
-  --paper:#f7f8fa;
+  --surface:#f5f5f7;
   --card:#fff;
-  --line:#e5e8ef;
-  --text:#0d111a;
-  --muted:#5a6373;
-  --muted-2:#8b94a3;
-  --muted-dark:rgba(226,234,246,.64);
-  --radius:16px;
+  --sep:#d2d2d7;
+  --sep-soft:rgba(0,0,0,.08);
+  --ink:#1d1d1f;
+  --ink-2:#6e6e73;
+  --ink-3:#86868b;
+
+  --accent:#59ffd1;           /* 应用真实强调色，用于深底 */
+  --accent-2:#2fe6b0;         /* 过渡色 */
+  --accent-ink:#0c8f6b;       /* 浅底上的强调文字 */
+  --accent-wash:rgba(12,143,107,.10);
+
+  --night:#0a0c11;
+  --night-2:#101319;
+  --app:#131526;              /* 应用窗口真实底色 */
+  --app-2:#1b1e33;
+  --app-line:rgba(255,255,255,.09);
+  --night-line:rgba(255,255,255,.11);
+  --night-ink:#f5f5f7;
+  --night-ink-2:#a1a1a6;
+
+  --r-lg:22px;
+  --r-md:14px;
+  --r-sm:10px;
+  --nav-h:64px;
   --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
-  --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",Roboto,sans-serif;
+  --sans:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",sans-serif;
+  --sh-1:0 1px 2px rgba(0,0,0,.04),0 8px 24px -12px rgba(0,0,0,.12);
+  --sh-2:0 2px 6px rgba(0,0,0,.05),0 18px 44px -20px rgba(0,0,0,.22);
+  --sh-3:0 4px 12px rgba(0,0,0,.08),0 40px 90px -36px rgba(0,0,0,.42);
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 body{
-  margin:0;background:var(--paper);color:var(--text);
+  margin:0;background:var(--surface);color:var(--ink);
   font-family:var(--sans);font-size:16px;line-height:1.7;
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
   overflow-x:hidden;
@@ -38,394 +59,569 @@ ul,ol{padding:0;list-style:none}
 a{color:inherit;text-decoration:none}
 img{max-width:100%;display:block}
 button{font-family:inherit}
-::selection{background:rgba(74,222,158,.32)}
-.container{width:min(1160px,100% - 48px);margin-inline:auto}
-section{scroll-margin-top:88px}
+::selection{background:rgba(47,230,176,.32)}
+.container{width:min(1140px,100% - 48px);margin-inline:auto}
+section{scroll-margin-top:calc(var(--nav-h) + 28px)}
 
-/* ============ 顶部进度与导航 ============ */
-.progress{position:fixed;top:0;left:0;height:2px;width:100%;z-index:70;background:transparent;pointer-events:none}
-.progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--mint),#8ef0c4);box-shadow:0 0 12px rgba(74,222,158,.6)}
+/* 顶部阅读进度 */
+.progress{position:fixed;top:0;left:0;height:2px;width:100%;z-index:80;background:transparent;pointer-events:none}
+.progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent-2),var(--accent));box-shadow:0 0 12px rgba(89,255,209,.55)}
 
+/* ==========================================================================
+   1. 导航
+   ========================================================================== */
 .nav{
-  position:fixed;inset:0 0 auto 0;z-index:60;
-  --nav-fg:#eaf0f8;
-  color:var(--nav-fg);
-  transition:background .25s ease,box-shadow .25s ease,color .25s ease;
+  position:fixed;inset:0 0 auto 0;z-index:70;height:var(--nav-h);
+  color:var(--night-ink);
+  transition:background .28s ease,box-shadow .28s ease,color .28s ease,border-color .28s ease;
+  border-bottom:1px solid transparent;
 }
 .nav.scrolled{
-  --nav-fg:#0d111a;
-  background:rgba(255,255,255,.86);
-  -webkit-backdrop-filter:saturate(160%) blur(16px);
-  backdrop-filter:saturate(160%) blur(16px);
-  box-shadow:0 1px 0 rgba(13,17,26,.07);
+  background:rgba(250,250,252,.78);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);
+  backdrop-filter:saturate(180%) blur(20px);
+  border-bottom-color:rgba(0,0,0,.07);
+  color:var(--ink);
 }
-.nav-in{height:66px;display:flex;align-items:center;gap:28px}
-.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em;flex:none}
-.brand img{width:26px;height:26px;border-radius:7px}
+.nav-in{height:100%;display:flex;align-items:center;gap:30px}
+.brand{display:flex;align-items:center;gap:9px;font-weight:600;letter-spacing:-.01em;flex:none}
+.brand img{width:27px;height:27px;border-radius:7px;box-shadow:0 2px 6px rgba(0,0,0,.22)}
 .brand .ver{
-  font:600 11px/1 var(--mono);letter-spacing:.02em;
+  font:600 10.5px/1 var(--mono);letter-spacing:.02em;
   padding:4px 7px;border-radius:6px;
-  border:1px solid rgba(255,255,255,.22);color:var(--mint);
+  border:1px solid rgba(255,255,255,.2);color:var(--accent);
 }
-.nav.scrolled .brand .ver{border-color:rgba(22,168,118,.35);color:var(--mint-deep);background:rgba(74,222,158,.08)}
-.nav-links{display:flex;align-items:center;gap:26px;margin-left:auto;font-size:14px}
-.nav-links a{position:relative;opacity:.82;transition:opacity .2s}
+.nav.scrolled .brand .ver{border-color:rgba(12,143,107,.28);color:var(--accent-ink);background:var(--accent-wash)}
+.nav-links{display:flex;align-items:center;gap:24px;margin-left:auto;font-size:14px}
+.nav-links a{position:relative;opacity:.74;transition:opacity .2s}
 .nav-links a:hover{opacity:1}
 .nav-links a.active{opacity:1}
 .nav-links a.active::after{
-  content:"";position:absolute;left:0;right:0;bottom:-8px;height:2px;
-  border-radius:2px;background:var(--mint);opacity:.9;
+  content:"";position:absolute;left:0;right:0;bottom:-9px;height:2px;
+  border-radius:2px;background:var(--accent);opacity:.95;
 }
-.nav.scrolled .nav-links a.active::after{background:var(--mint-deep)}
+.nav.scrolled .nav-links a.active::after{background:var(--accent-ink)}
+.nav-links .ext{display:inline-flex;align-items:center;gap:4px}
+.nav-links .ext svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.8}
 .nav-cta{
-  display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;border-radius:9px;
-  font-size:13.5px;font-weight:600;
-  background:var(--mint);color:#04160e;
-  box-shadow:0 6px 18px -8px rgba(74,222,158,.8);
-  transition:transform .18s,box-shadow .18s;
+  display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 15px;border-radius:999px;
+  font-size:13px;font-weight:600;flex:none;
+  background:var(--accent);color:#04231c;
+  box-shadow:0 6px 18px -8px rgba(89,255,209,.7);
+  transition:transform .18s ease,box-shadow .18s ease;
 }
-.nav-cta:hover{transform:translateY(-1px);box-shadow:0 10px 24px -8px rgba(74,222,158,.9)}
+.nav-cta:hover{transform:translateY(-1px);box-shadow:0 10px 24px -8px rgba(89,255,209,.85)}
+.nav.scrolled .nav-cta{box-shadow:0 4px 14px -6px rgba(12,143,107,.5)}
 
-/* ============ Hero ============ */
+/* ==========================================================================
+   2. Hero
+   ========================================================================== */
 .hero{
-  position:relative;overflow:hidden;color:#e9eff7;
-  background:var(--ink);
-  padding:132px 0 0;
-}
-.hero::before{
-  content:"";position:absolute;inset:-20% -10% auto -10%;height:120%;pointer-events:none;
+  position:relative;overflow:hidden;color:var(--night-ink);
   background:
-    radial-gradient(760px 460px at 16% 0%,rgba(74,222,158,.20),transparent 62%),
-    radial-gradient(620px 380px at 88% 12%,rgba(58,120,255,.16),transparent 65%);
+    radial-gradient(900px 520px at 76% 4%,rgba(47,230,176,.15),transparent 62%),
+    radial-gradient(760px 460px at 8% 8%,rgba(62,116,255,.14),transparent 62%),
+    linear-gradient(180deg,#0a0c11 0%,#0c1017 52%,#0a0c11 100%);
+  padding:calc(var(--nav-h) + 74px) 0 0;
 }
-.hero::after{
-  content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+/* 网格纹理 */
+.hero::before{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.55;
   background-image:
     linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),
     linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px);
-  background-size:68px 68px;
-  -webkit-mask-image:radial-gradient(90% 70% at 50% 0%,#000 20%,transparent 78%);
-  mask-image:radial-gradient(90% 70% at 50% 0%,#000 20%,transparent 78%);
+  background-size:72px 72px;
+  -webkit-mask-image:radial-gradient(92% 68% at 50% 0%,#000 12%,transparent 76%);
+  mask-image:radial-gradient(92% 68% at 50% 0%,#000 12%,transparent 76%);
 }
-.hero-in{position:relative;z-index:2;display:grid;grid-template-columns:minmax(0,1.02fr) minmax(0,.98fr);gap:clamp(36px,5vw,72px);align-items:center}
+/* 颗粒 */
+.hero::after{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.22;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");
+}
+.hero-in{position:relative;z-index:3;display:grid;grid-template-columns:minmax(0,1.04fr) minmax(0,.96fr);gap:clamp(36px,5vw,68px);align-items:center}
+
 .eyebrow{
   display:inline-flex;align-items:center;gap:9px;
-  padding:6px 13px;border-radius:999px;
-  border:1px solid rgba(74,222,158,.28);
-  background:rgba(74,222,158,.08);
-  font-size:12.5px;letter-spacing:.04em;color:#c8efdd;
+  padding:6px 14px;border-radius:999px;
+  border:1px solid rgba(89,255,209,.26);
+  background:rgba(89,255,209,.08);
+  font-size:12.5px;letter-spacing:.02em;color:#bdf5e4;
 }
-.eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--mint);box-shadow:0 0 0 3px rgba(74,222,158,.16)}
+.eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px rgba(89,255,209,.16)}
 .hero h1{
-  margin:26px 0 0;font-size:clamp(38px,4.6vw,60px);line-height:1.12;
-  letter-spacing:-.025em;font-weight:700;
+  margin:24px 0 0;font-size:clamp(38px,5.1vw,64px);line-height:1.08;
+  letter-spacing:-.022em;font-weight:700;
 }
 .hero h1 .hl{
-  color:var(--mint);
-  text-shadow:0 0 32px rgba(74,222,158,.28);
+  background:linear-gradient(96deg,#8bffdd 0%,var(--accent) 42%,#35c8ff 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
 }
-.hero p.sub{margin-top:22px;max-width:33em;font-size:16.5px;line-height:1.85;color:var(--muted-dark)}
-.hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
+.hero p.sub{margin-top:22px;max-width:34em;font-size:16.5px;line-height:1.85;color:var(--night-ink-2)}
+.hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
 
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:9px;
-  height:48px;padding:0 22px;border-radius:11px;
+  height:48px;padding:0 22px;border-radius:999px;
   font-size:14.5px;font-weight:600;letter-spacing:.01em;
   border:1px solid transparent;cursor:pointer;
-  transition:transform .18s ease,box-shadow .18s ease,background .18s ease,border-color .18s ease;
+  transition:transform .18s ease,box-shadow .18s ease,background .18s ease,border-color .18s ease,color .18s ease;
 }
 .btn svg{flex:none}
-.btn-primary{background:var(--mint);color:#05170f;box-shadow:0 10px 26px -10px rgba(74,222,158,.85)}
-.btn-primary:hover{transform:translateY(-2px);box-shadow:0 16px 32px -12px rgba(74,222,158,.95)}
-.btn-ghost{border-color:rgba(255,255,255,.18);color:#e8eef7;background:rgba(255,255,255,.05)}
-.btn-ghost:hover{transform:translateY(-2px);background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.3)}
-.btn-outline{border-color:var(--line);color:var(--text);background:#fff}
-.btn-outline:hover{border-color:#c8d0dc;transform:translateY(-2px);box-shadow:0 12px 26px -18px rgba(13,17,26,.4)}
-.btn-sm{height:38px;padding:0 15px;font-size:13px;border-radius:9px}
+.btn-primary{background:var(--accent);color:#04231c;box-shadow:0 12px 30px -12px rgba(89,255,209,.75)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 18px 38px -14px rgba(89,255,209,.9)}
+.btn-ghost{border-color:rgba(255,255,255,.16);color:#e9eef5;background:rgba(255,255,255,.05)}
+.btn-ghost:hover{transform:translateY(-2px);background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.28)}
+.btn-outline{border-color:var(--sep);color:var(--ink);background:#fff}
+.btn-outline:hover{border-color:#b9bfc9;transform:translateY(-2px);box-shadow:0 14px 28px -20px rgba(0,0,0,.5)}
+.btn-sm{height:38px;padding:0 16px;font-size:13px}
+.btn-note{font-weight:500;opacity:.6}
 
-.hero-meta{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:26px;font-size:12.5px;color:var(--muted-dark)}
+.hero-meta{display:flex;flex-wrap:wrap;gap:9px 20px;margin-top:28px;font-size:12.5px;color:var(--night-ink-2)}
 .hero-meta span{display:inline-flex;align-items:center;gap:7px}
-.hero-meta svg{width:14px;height:14px;stroke:var(--mint);opacity:.9;flex:none}
+.hero-meta svg{width:14px;height:14px;stroke:var(--accent);opacity:.95;flex:none;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.src-link{display:inline-flex;align-items:center;gap:7px;margin-top:18px;font-size:12.5px;color:#9fe9d3;transition:color .2s}
+.src-link svg{width:14px;height:14px;stroke:currentColor;opacity:.85;flex:none;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.src-link .arw{transition:transform .2s}
+.src-link:hover{color:#fff}
+.src-link:hover .arw{transform:translateX(3px)}
 
-/* 菜单栏模拟 */
-.stage{position:relative;padding:10px 0 0;width:100%;max-width:600px;min-width:0;margin-inline:auto}
-.stage-tag{
-  position:absolute;top:-6px;right:6px;z-index:3;
-  font-size:11px;letter-spacing:.08em;color:rgba(226,234,246,.55);
+/* --- 舞台：一台迷你 macOS 屏幕 --- */
+.stage{position:relative;width:100%;max-width:520px;margin-inline:auto}
+.screen{
+  position:relative;border-radius:18px;overflow:hidden;
+  background:linear-gradient(168deg,#171c2b 0%,#0f1320 58%,#141a29 100%);
+  border:1px solid rgba(255,255,255,.1);
+  box-shadow:0 50px 110px -44px rgba(0,0,0,.9);
 }
-.menubar{
-  display:flex;align-items:center;gap:14px;
-  padding:9px 12px;border-radius:14px;
-  background:linear-gradient(180deg,#1b2235,#101629);
-  border:1px solid rgba(255,255,255,.12);
-  box-shadow:0 26px 70px -30px #000;
-  font-size:12.5px;color:#c9d3e3;
+.screen::after{ /* 屏幕辉光 */
+  content:"";position:absolute;inset:-1px;border-radius:18px;pointer-events:none;
+  background:radial-gradient(70% 40% at 50% 0%,rgba(89,255,209,.13),transparent 70%);
 }
-.menubar .mb-brand{display:flex;align-items:center;gap:7px}
-.menubar .mb-brand img{width:15px;height:15px;border-radius:4px}
-.menubar .mb-right{margin-left:auto;display:flex;align-items:center;gap:12px;color:#93a0b5}
-.ip-pill{
-  display:inline-flex;align-items:center;gap:8px;
-  padding:4px 10px;border-radius:7px;
-  background:rgba(74,222,158,.12);
-  border:1px solid rgba(74,222,158,.42);
-  color:#c4f6de;font-family:var(--mono);font-size:12px;letter-spacing:.01em;
-}
-.ip-pill i{width:6px;height:6px;border-radius:50%;background:var(--mint);box-shadow:0 0 8px rgba(74,222,158,.9)}
-
-.panel{
-  margin:-6px 0 0 26px;position:relative;z-index:2;
-  border-radius:16px;padding:16px 16px 8px;
-  background:linear-gradient(180deg,#141a2c,#0d1221);
-  border:1px solid rgba(255,255,255,.12);
-  box-shadow:0 44px 90px -40px #000,inset 0 1px 0 rgba(255,255,255,.06);
-}
-.panel-label{
-  display:flex;align-items:center;justify-content:space-between;
-  font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:rgba(74,222,158,.85);
-}
-.panel-label em{font-style:normal;color:rgba(226,234,246,.4);letter-spacing:.06em}
-.pub-row{
+/* 菜单栏 */
+.mb-bar{
+  position:relative;z-index:2;
   display:flex;align-items:center;gap:12px;
-  padding:10px 0 14px;border-bottom:1px solid rgba(255,255,255,.08);
+  height:34px;padding:0 12px;
+  background:rgba(255,255,255,.055);
+  -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
+  border-bottom:1px solid rgba(255,255,255,.08);
+  font-size:11.5px;color:#c6cedb;
 }
-.pub-row .addr{font-family:var(--mono);font-size:23px;color:#fff;letter-spacing:-.01em}
-.chip{
-  margin-left:auto;display:inline-flex;align-items:center;gap:5px;
-  padding:4px 9px;border-radius:6px;
-  font-size:11px;color:#bff3d9;
-  border:1px solid rgba(74,222,158,.35);background:rgba(74,222,158,.1);
-  white-space:nowrap;
+.mb-app{display:inline-flex;align-items:center;gap:7px;min-width:0;font-weight:600;color:#d3dbe8}
+.mb-app img{width:15px;height:15px;border-radius:4px;flex:none}
+/* 菜单栏右上角的状态项：IP 常驻在最右侧一组 */
+.mb-extra{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:3px 8px;border-radius:7px;
+  background:rgba(89,255,209,.13);border:1px solid rgba(89,255,209,.3);
 }
-.chip svg{width:12px;height:12px;stroke:currentColor}
-.local-head{display:flex;align-items:center;justify-content:space-between;padding:12px 0 4px;font-size:11.5px;color:rgba(226,234,246,.55)}
-.local-row{
-  display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px;
-  padding:9px 0;border-top:1px solid rgba(255,255,255,.06);
+.mb-extra .ip{font-family:var(--mono);font-size:11.5px;color:var(--accent);letter-spacing:.01em}
+.mb-right{margin-left:auto;display:inline-flex;align-items:center;gap:11px;color:#94a0b2}
+.mb-right svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.mb-right .clock{font-variant-numeric:tabular-nums;letter-spacing:.01em}
+/* 桌面壁纸区 */
+.screen-wall{position:relative;padding:26px 24px 0}
+.screen-wall::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(420px 260px at 72% 8%,rgba(47,230,176,.16),transparent 66%),
+    radial-gradient(360px 240px at 18% 78%,rgba(62,116,255,.16),transparent 66%);
 }
-.local-row:first-of-type{border-top:none}
-.iface{font-family:var(--mono);font-size:12px;color:#8fa0bb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.local-row .addr{font-family:var(--mono);font-size:12.5px;color:#e3ebf6;white-space:nowrap}
-.chip-mini{
-  padding:3px 8px;border-radius:5px;font-size:10.5px;
-  color:#a9efcd;border:1px solid rgba(74,222,158,.28);
-  background:rgba(74,222,158,.07);
+/* 应用窗口 */
+.win{
+  position:relative;z-index:2;
+  border-radius:12px 12px 0 0;overflow:hidden;
+  background:var(--app);
+  border:1px solid rgba(255,255,255,.1);
+  border-bottom:none;
+  box-shadow:0 34px 70px -30px rgba(0,0,0,.95);
 }
-.panel-foot{padding:10px 0 6px;border-top:1px solid rgba(255,255,255,.06);font-size:11px;color:rgba(226,234,246,.42);display:flex;gap:14px;flex-wrap:wrap}
+.win-bar{
+  display:flex;align-items:center;gap:10px;height:34px;padding:0 12px;
+  background:linear-gradient(180deg,#242a40,#1c2136);
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+.lights{display:inline-flex;gap:7px;flex:none}
+.lights b{width:11px;height:11px;border-radius:50%;display:block}
+.lights b:nth-child(1){background:#ff5f57}
+.lights b:nth-child(2){background:#febc2e}
+.lights b:nth-child(3){background:#28c840}
+.win-title{font-size:12px;font-weight:600;color:#dfe6f2;letter-spacing:.01em}
+.win-body{position:relative;line-height:0}
+.win-body img{width:100%;height:auto}
+/* 底部渐隐，暗示列表仍在继续 */
+.win-body::after{
+  content:"";position:absolute;left:0;right:0;bottom:0;height:40px;pointer-events:none;
+  background:linear-gradient(180deg,rgba(19,21,38,0),rgba(19,21,38,.9) 58%,var(--app) 100%);
+}
+.stage-note{
+  position:relative;z-index:2;margin-top:18px;
+  font-size:12px;color:rgba(226,234,246,.5);text-align:center;letter-spacing:.01em;
+}
 
 /* 数据条 */
 .stats{
-  position:relative;z-index:2;margin-top:64px;
+  position:relative;z-index:3;margin-top:70px;
   border-top:1px solid rgba(255,255,255,.1);
   display:grid;grid-template-columns:repeat(4,1fr);
-  padding:26px 0 34px;
+  padding:28px 0 38px;
 }
-.stats > div{padding-left:22px;border-left:1px solid rgba(255,255,255,.1)}
+.stats > div{padding-left:24px;border-left:1px solid rgba(255,255,255,.1)}
 .stats > div:first-child{padding-left:0;border-left:none}
-.stats b{display:block;font:700 24px/1.2 var(--mono);color:#fff;letter-spacing:-.02em}
-.stats b span{font-size:13px;font-weight:500;color:var(--mint);margin-left:4px}
-.stats small{display:block;margin-top:6px;font-size:12px;color:rgba(226,234,246,.5)}
+.stats b{display:block;font:700 25px/1.2 var(--mono);color:#fff;letter-spacing:-.02em}
+.stats b span{font-size:13px;font-weight:500;color:var(--accent);margin-left:5px;font-family:var(--sans)}
+.stats small{display:block;margin-top:7px;font-size:12px;color:rgba(226,234,246,.52)}
 
-/* ============ 通用区块 ============ */
-.section{padding:clamp(68px,8vw,104px) 0}
-.section.alt{background:#fff;border-block:1px solid var(--line)}
-.head{max-width:720px;margin-bottom:clamp(36px,4vw,52px)}
+/* ==========================================================================
+   3. 区块骨架
+   ========================================================================== */
+.section{padding:clamp(72px,8.5vw,110px) 0}
+.section.alt{background:var(--card);border-block:1px solid var(--sep-soft)}
+.head{max-width:740px;margin-bottom:clamp(38px,4.4vw,58px)}
 .kicker{
   display:inline-flex;align-items:center;gap:10px;
-  font-size:12px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#7d8798;
+  font-size:11.5px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-3);
 }
-.kicker::before{content:"";width:20px;height:1px;background:var(--mint-deep)}
-.head h2{margin-top:14px;font-size:clamp(26px,3.1vw,38px);line-height:1.25;letter-spacing:-.02em;font-weight:700}
-.head p{margin-top:14px;font-size:15.5px;line-height:1.85;color:var(--muted);max-width:40em}
+.kicker::before{content:"";width:22px;height:1px;background:var(--accent-ink)}
+.head h2{margin-top:15px;font-size:clamp(28px,3.5vw,42px);line-height:1.18;letter-spacing:-.022em;font-weight:700}
+.head p{margin-top:15px;font-size:15.5px;line-height:1.85;color:var(--ink-2);max-width:42em}
+.head code{font-family:var(--mono);font-size:13px;background:#f0f1f4;border:1px solid var(--sep-soft);padding:1px 6px;border-radius:5px}
 
-/* 特性卡 */
-.feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-.card{
-  background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
-  padding:26px 24px 24px;
-  transition:transform .22s ease,box-shadow .22s ease,border-color .22s ease;
+/* ==========================================================================
+   4. 功能 Bento
+   ========================================================================== */
+.bento{display:grid;grid-template-columns:repeat(6,1fr);gap:20px}
+.feat{
+  position:relative;overflow:hidden;
+  background:var(--card);border:1px solid var(--sep-soft);border-radius:var(--r-lg);
+  padding:28px 26px 26px;
+  box-shadow:var(--sh-1);
+  transition:transform .24s ease,box-shadow .24s ease,border-color .24s ease;
 }
-.feature-grid .card:hover{transform:translateY(-4px);border-color:#cfd7e2;box-shadow:0 24px 48px -34px rgba(13,17,26,.5)}
+.feat:hover{transform:translateY(-4px);box-shadow:var(--sh-2);border-color:rgba(0,0,0,.13)}
+.feat--half{grid-column:span 3}
+.feat--third{grid-column:span 2}
+.feat--full{grid-column:span 6;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.86fr);gap:34px;align-items:center}
+.feat__top{display:flex;align-items:center;gap:12px}
+.feat__no{
+  font:600 11px/1 var(--mono);letter-spacing:.08em;color:var(--ink-3);
+  padding:5px 8px;border-radius:7px;border:1px solid var(--sep-soft);background:#fafafa;
+}
 .icon{
-  width:42px;height:42px;border-radius:11px;display:grid;place-items:center;
-  background:rgba(74,222,158,.1);border:1px solid rgba(22,168,118,.24);
+  width:40px;height:40px;border-radius:11px;display:grid;place-items:center;flex:none;
+  background:linear-gradient(160deg,rgba(89,255,209,.20),rgba(47,230,176,.08));
+  border:1px solid rgba(12,143,107,.20);
 }
-.icon svg{width:21px;height:21px;stroke:#128f66;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
-.card h3{margin-top:17px;font-size:16.5px;letter-spacing:-.01em}
-.card p{margin-top:8px;font-size:14px;line-height:1.75;color:var(--muted)}
-.card p code{font-family:var(--mono);font-size:12px;background:#f4f6f9;border:1px solid #e9ecf2;padding:1px 5px;border-radius:4px;color:#39424f}
-.card .tagline{margin-top:14px;font:600 11px/1 var(--mono);letter-spacing:.06em;color:#9aa4b2}
+.icon svg{width:20px;height:20px;stroke:var(--accent-ink);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.feat h3{margin-top:16px;font-size:17.5px;letter-spacing:-.01em;font-weight:600}
+.feat p{margin-top:9px;font-size:14px;line-height:1.8;color:var(--ink-2)}
+.feat p code{font-family:var(--mono);font-size:12px;background:#f3f4f7;border:1px solid var(--sep-soft);padding:1px 5px;border-radius:4px;color:#3a4350}
+.tagline{margin-top:16px;font:600 10.5px/1 var(--mono);letter-spacing:.07em;color:var(--ink-3)}
 
-/* 界面 */
-.shots{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px;align-items:center}
-.shot{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:12px;transition:transform .22s,box-shadow .22s}
-.shot:hover{transform:translateY(-3px);box-shadow:0 26px 56px -40px rgba(13,17,26,.55)}
-.shot-frame{border-radius:10px;overflow:hidden;background:#eef1f5;border:1px solid #e1e5ec}
+/* 卡片内的应用拟真小样 */
+.mini{
+  margin-top:20px;border-radius:var(--r-md);overflow:hidden;
+  background:var(--app);border:1px solid var(--app-line);
+  padding:14px 15px;font-size:12px;color:#dfe6f2;
+}
+.mini-label{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:rgba(89,255,209,.82)}
+.mini-pub{display:flex;align-items:center;gap:10px;margin-top:9px}
+.mini-pub .v{font-family:var(--mono);font-size:17px;color:#fff;letter-spacing:-.01em}
+.mini-chip{
+  margin-left:auto;flex:none;
+  display:inline-flex;align-items:center;gap:4px;
+  padding:4px 9px;border-radius:7px;font-size:11px;
+  color:#8bffe0;border:1px solid rgba(89,255,209,.42);background:rgba(89,255,209,.10);
+}
+.mini-chip svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.mini-row{
+  display:flex;align-items:center;gap:10px;padding:7px 0;
+  border-top:1px solid var(--app-line);font-family:var(--mono);font-size:11.5px;
+}
+.mini-row .if{color:#8a93a8;flex:none}
+.mini-row .ip{color:#e3eaf7;margin-left:auto}
+.mini-div{margin-top:12px;padding-top:10px;border-top:1px solid var(--app-line);font-size:10.5px;color:rgba(226,234,246,.45)}
+/* Windows 浮窗小样 */
+.pill-win{
+  border-radius:12px;overflow:hidden;
+  background:var(--app);border:1px solid var(--app-line);
+  box-shadow:0 24px 50px -26px rgba(0,0,0,.55);
+}
+.pill-win .pw-bar{
+  display:flex;align-items:center;gap:8px;height:30px;padding:0 10px;
+  background:linear-gradient(180deg,#242a40,#1c2136);border-bottom:1px solid var(--app-line);
+}
+.pill-win .pw-bar span{font-size:11px;font-weight:600;color:#dfe6f2}
+.pill-win .pw-bar i{
+  margin-left:auto;width:16px;height:16px;border-radius:5px;display:grid;place-items:center;
+  color:rgba(226,234,246,.5);font-size:11px;font-style:normal;line-height:1;
+}
+.pill-win .pw-body{padding:11px 12px 13px}
+.pill-win .pw-row{display:flex;align-items:center;gap:9px}
+.pill-win .pw-row .v{font-family:var(--mono);font-size:16px;color:#fff}
+.pill-win .pw-foot{margin-top:9px;font-size:10.5px;color:rgba(226,234,246,.42)}
+
+/* 源码条 */
+.src-strip{
+  margin-top:20px;display:flex;align-items:center;gap:20px;
+  padding:24px 26px;background:var(--card);
+  border:1px solid var(--sep-soft);border-radius:var(--r-lg);box-shadow:var(--sh-1);
+}
+.src-strip .icon{width:40px;height:40px}
+.src-strip .txt{min-width:0}
+.src-strip b{display:block;font-size:15px;font-weight:600}
+.src-strip p{margin-top:5px;font-size:13px;line-height:1.75;color:var(--ink-2)}
+.src-strip p code{font-family:var(--mono);font-size:11.5px;background:#f3f4f7;border:1px solid var(--sep-soft);padding:1px 5px;border-radius:4px}
+.src-strip .btn{margin-left:auto;flex:none}
+
+/* ==========================================================================
+   5. 界面展示（深色带）
+   ========================================================================== */
+.showcase{
+  position:relative;overflow:hidden;color:var(--night-ink);
+  background:
+    radial-gradient(760px 420px at 50% -6%,rgba(47,230,176,.13),transparent 64%),
+    linear-gradient(180deg,#0a0c11,#0c0f16);
+}
+.showcase .kicker{color:#8e97a8}
+.showcase .kicker::before{background:var(--accent)}
+.showcase .head p{color:var(--night-ink-2)}
+.show-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;align-items:start}
+.shot{
+  background:rgba(255,255,255,.035);border:1px solid var(--night-line);
+  border-radius:var(--r-lg);padding:14px;overflow:hidden;
+  transition:transform .24s ease,border-color .24s ease,background .24s ease;
+}
+.shot:hover{transform:translateY(-4px);border-color:rgba(89,255,209,.28);background:rgba(255,255,255,.055)}
+.shot--wide{grid-column:span 3}
+.shot--wide2{grid-column:span 2}
+.shot-frame{
+  border-radius:12px;overflow:hidden;background:#0b0e15;
+  border:1px solid rgba(255,255,255,.09);
+  display:flex;align-items:center;justify-content:center;
+}
+.shot--menu .shot-frame{background:linear-gradient(180deg,#101521,#0b0e15);padding:14px 16px}
 .shot img{width:100%;height:auto}
-.shot.tall .shot-frame{width:min(100%,392px);margin-inline:auto}
-.shot.tall figcaption{text-align:center}
-.shot figcaption{padding:14px 4px 4px;font-size:13px;line-height:1.7;color:var(--muted)}
-.shot figcaption b{color:var(--text);font-weight:600}
-.note-lite{display:flex;gap:10px;margin-top:20px;font-size:13px;color:var(--muted);align-items:flex-start}
-.note-lite svg{width:16px;height:16px;flex:none;margin-top:3px;stroke:#128f66}
+.shot--menu img{width:100%;border-radius:6px}
+.shot figcaption{padding:14px 4px 3px;font-size:13px;line-height:1.75;color:var(--night-ink-2)}
+.shot figcaption b{color:var(--night-ink);font-weight:600}
+.note-lite{display:flex;gap:10px;margin-top:22px;font-size:13px;color:var(--night-ink-2);align-items:flex-start}
+.note-lite svg{width:16px;height:16px;flex:none;margin-top:3px;stroke:var(--accent);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 
-/* 安装 */
+/* ==========================================================================
+   6. 安装
+   ========================================================================== */
 .install-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
-.os-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:28px 26px}
-.os-head{display:flex;align-items:center;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--line)}
-.os-head svg{width:22px;height:22px;fill:none;stroke:#128f66;stroke-width:1.6}
-.os-head h3{font-size:17px}
-.os-head span{margin-left:auto;font:600 11px/1 var(--mono);color:#8c96a5}
-.steps{margin-top:6px}
-.steps li{display:grid;grid-template-columns:30px 1fr;gap:12px;padding:14px 0;border-bottom:1px dashed #eceff4;align-items:start}
-.steps li:last-child{border-bottom:none;padding-bottom:2px}
+.os-card{background:var(--card);border:1px solid var(--sep-soft);border-radius:var(--r-lg);padding:28px 28px 24px;box-shadow:var(--sh-1)}
+.os-head{display:flex;align-items:center;gap:12px;padding-bottom:18px;border-bottom:1px solid var(--sep-soft)}
+.os-head .icon{width:38px;height:38px;border-radius:10px}
+.os-head h3{font-size:17px;font-weight:600}
+.os-head span{margin-left:auto;font:600 11px/1 var(--mono);color:var(--ink-3)}
+.steps{margin-top:4px}
+.steps li{display:grid;grid-template-columns:28px 1fr;gap:13px;padding:15px 0;border-bottom:1px dashed var(--sep-soft);align-items:start}
+.steps li:last-child{border-bottom:none;padding-bottom:0}
 .steps .n{
   width:26px;height:26px;border-radius:8px;display:grid;place-items:center;
-  font:600 11.5px/1 var(--mono);color:#0f8a63;
-  background:rgba(74,222,158,.1);border:1px solid rgba(22,168,118,.22);
+  font:600 11.5px/1 var(--mono);color:var(--accent-ink);
+  background:var(--accent-wash);border:1px solid rgba(12,143,107,.18);
 }
 .steps b{display:block;font-size:14.5px;font-weight:600}
-.steps p{margin-top:3px;font-size:13px;line-height:1.65;color:var(--muted)}
-.steps code{font-family:var(--mono);font-size:12px;background:#f1f3f7;border:1px solid #e6e9ef;border-radius:5px;padding:1px 5px}
-
+.steps p{margin-top:4px;font-size:13px;line-height:1.7;color:var(--ink-2)}
+.steps code{font-family:var(--mono);font-size:11.5px;background:#f3f4f7;border:1px solid var(--sep-soft);border-radius:5px;padding:1px 5px;word-break:break-all}
 .sign-note{
-  margin-top:20px;padding:18px 20px;border-radius:12px;
-  background:#fdfaf1;border:1px solid #f2e6c8;
-  font-size:13px;line-height:1.75;color:#6b5c33;
+  margin-top:22px;padding:18px 22px;border-radius:var(--r-md);
+  background:#fdf8ec;border:1px solid #f0e3c4;
+  font-size:13px;line-height:1.8;color:#6a5a30;
 }
-.sign-note b{color:#4c3f20}
+.sign-note b{color:#4a3d1e}
 .sign-note ul{margin-top:8px}
 .sign-note li{padding-left:16px;position:relative}
-.sign-note li::before{content:"";position:absolute;left:2px;top:.72em;width:5px;height:5px;border-radius:50%;background:#d3b878}
+.sign-note li::before{content:"";position:absolute;left:2px;top:.78em;width:5px;height:5px;border-radius:50%;background:#d0b476}
 
-/* 下载 */
+/* ==========================================================================
+   7. 下载
+   ========================================================================== */
 .dl-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;align-items:stretch}
 .dl{
   display:flex;flex-direction:column;
-  background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:24px 22px;
+  background:var(--card);border:1px solid var(--sep-soft);border-radius:var(--r-lg);
+  padding:24px 22px 22px;box-shadow:var(--sh-1);
   transition:transform .22s,box-shadow .22s,border-color .22s;
 }
-.dl:hover{transform:translateY(-4px);border-color:#cfd7e2;box-shadow:0 26px 54px -38px rgba(13,17,26,.5)}
-.dl.primary{border-color:rgba(22,168,118,.4);background:linear-gradient(180deg,#fff 0%,#f6fffb 100%)}
+.dl:hover{transform:translateY(-4px);box-shadow:var(--sh-2);border-color:rgba(0,0,0,.13)}
+.dl.primary{border-color:rgba(12,143,107,.34);background:linear-gradient(180deg,#fff 0%,#f4fffb 100%)}
 .dl-top{display:flex;align-items:center;gap:10px}
-.dl-top .plat{font-size:13.5px;font-weight:700}
+.dl-top .plat{font-size:13.5px;font-weight:700;letter-spacing:-.005em}
 .badge{
   font:600 10px/1 var(--mono);letter-spacing:.04em;padding:4px 7px;border-radius:5px;
-  color:#0f8a63;background:rgba(74,222,158,.1);border:1px solid rgba(22,168,118,.24);
+  color:var(--accent-ink);background:var(--accent-wash);border:1px solid rgba(12,143,107,.22);
 }
 .badge.gray{color:#6d7787;background:#f2f4f8;border-color:#e4e8ee}
-.dl .fname{margin-top:14px;font:500 12px/1.5 var(--mono);word-break:break-all;color:#39424f}
-.dl .desc{margin-top:8px;font-size:12.8px;line-height:1.7;color:var(--muted);min-height:44px}
-.dl .size{margin-top:14px;display:flex;align-items:baseline;gap:6px}
-.dl .size b{font:700 22px/1 var(--mono);letter-spacing:-.02em}
-.dl .size span{font-size:12px;color:var(--muted-2)}
-.sha{
-  margin-top:12px;display:flex;align-items:center;gap:8px;
-  padding:8px 9px;border-radius:8px;background:#f5f7fa;border:1px solid #e9ecf2;
+.dl .fname{
+  margin-top:14px;font:500 11.5px/1.55 var(--mono);word-break:break-all;color:#39424f;
+  padding:8px 10px;border-radius:8px;background:#f6f7fa;border:1px solid var(--sep-soft);
 }
-.sha code{flex:1;font-family:var(--mono);font-size:10.5px;line-height:1.5;color:#7a8494;word-break:break-all;max-height:2.9em;overflow:hidden}
+.dl .desc{margin-top:12px;font-size:12.8px;line-height:1.75;color:var(--ink-2);min-height:44px}
+.dl .size{margin-top:14px;display:flex;align-items:baseline;gap:7px}
+.dl .size b{font:700 23px/1 var(--mono);letter-spacing:-.02em}
+.dl .size span{font-size:12px;color:var(--ink-3)}
+.sha{
+  margin-top:14px;display:flex;align-items:center;gap:8px;
+  padding:9px 9px 9px 11px;border-radius:9px;background:#f6f7fa;border:1px solid var(--sep-soft);
+}
+.sha code{flex:1;font-family:var(--mono);font-size:10.5px;line-height:1.55;color:#7a8494;word-break:break-all;max-height:3em;overflow:hidden}
 .sha button{
   flex:none;border:1px solid #e0e5ec;background:#fff;border-radius:6px;
-  font-size:10.5px;color:#5a6373;padding:3px 7px;cursor:pointer;transition:.16s;
+  font-size:10.5px;color:#5a6373;padding:4px 8px;cursor:pointer;transition:.16s;
 }
-.sha button:hover{color:#0f8a63;border-color:rgba(22,168,118,.4);background:rgba(74,222,158,.06)}
+.sha button:hover{color:var(--accent-ink);border-color:rgba(12,143,107,.4);background:var(--accent-wash)}
 .dl .btn{margin-top:18px;width:100%}
-.dl-foot{margin-top:14px;font-size:11.5px;color:var(--muted-2);display:flex;align-items:center;gap:6px}
+.dl-foot{margin-top:13px;font-size:11.5px;color:var(--ink-3);display:flex;align-items:center;gap:6px}
 
-/* FAQ */
-.faq{max-width:840px;border-top:1px solid var(--line)}
-.faq details{border-bottom:1px solid var(--line)}
+/* ==========================================================================
+   8. 更新日志
+   ========================================================================== */
+.log{display:grid;gap:16px;max-width:900px}
+.log-item{
+  background:var(--card);border:1px solid var(--sep-soft);border-radius:var(--r-lg);
+  padding:24px 26px;box-shadow:var(--sh-1);
+}
+.log-item.current{border-color:rgba(12,143,107,.3);background:linear-gradient(180deg,#fff 0%,#f7fffc 100%)}
+.log-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.log-ver{font:700 16px/1 var(--mono);letter-spacing:-.01em}
+.log-date{font:500 11.5px/1 var(--mono);color:var(--ink-3)}
+.log-head .badge{margin-left:auto}
+.log ul{margin-top:16px;display:grid;gap:9px}
+.log li{position:relative;padding-left:20px;font-size:14px;line-height:1.75;color:var(--ink-2)}
+.log li::before{
+  content:"";position:absolute;left:2px;top:.66em;width:6px;height:6px;border-radius:50%;
+  background:var(--accent);box-shadow:0 0 0 3px var(--accent-wash);
+}
+.log-more{margin-top:22px;font-size:13.5px}
+.log-more a{color:var(--accent-ink);border-bottom:1px solid rgba(12,143,107,.3);padding-bottom:1px}
+.log-more a:hover{border-bottom-color:var(--accent-ink)}
+
+/* ==========================================================================
+   9. FAQ
+   ========================================================================== */
+.faq{max-width:860px;border-top:1px solid var(--sep)}
+.faq details{border-bottom:1px solid var(--sep)}
 .faq summary{
   list-style:none;cursor:pointer;
   display:flex;align-items:center;gap:16px;
-  padding:20px 4px;font-size:15px;font-weight:600;
+  padding:21px 4px;font-size:15.5px;font-weight:600;transition:color .18s;
 }
+.faq summary:hover{color:var(--accent-ink)}
 .faq summary::-webkit-details-marker{display:none}
 .faq summary .q{
-  width:22px;height:22px;flex:none;border-radius:6px;display:grid;place-items:center;
-  font:600 10px/1 var(--mono);color:#0f8a63;background:rgba(74,222,158,.1);border:1px solid rgba(22,168,118,.2);
+  width:24px;height:24px;flex:none;border-radius:7px;display:grid;place-items:center;
+  font:600 10px/1 var(--mono);color:var(--accent-ink);background:var(--accent-wash);border:1px solid rgba(12,143,107,.2);
 }
-.faq summary .plus{margin-left:auto;width:16px;height:16px;position:relative;flex:none;transition:transform .25s ease}
-.faq summary .plus::before,.faq summary .plus::after{
-  content:"";position:absolute;background:#9aa4b2;border-radius:2px;
-  transition:opacity .2s,background .2s;
-}
+.faq summary .plus{margin-left:auto;width:16px;height:16px;position:relative;flex:none;transition:transform .28s cubic-bezier(.2,.8,.2,1)}
+.faq summary .plus::before,.faq summary .plus::after{content:"";position:absolute;background:#9aa4b2;border-radius:2px;transition:background .2s}
 .faq summary .plus::before{left:0;top:7px;width:16px;height:2px}
 .faq summary .plus::after{left:7px;top:0;width:2px;height:16px}
 .faq details[open] summary .plus{transform:rotate(45deg)}
-.faq details[open] summary .plus::before,.faq details[open] summary .plus::after{background:#0f8a63}
-.faq .a{padding:0 4px 24px 42px;font-size:14px;line-height:1.85;color:var(--muted)}
+.faq details[open] summary .plus::before,.faq details[open] summary .plus::after{background:var(--accent-ink)}
+.faq .a{padding:0 4px 26px 44px;font-size:14px;line-height:1.9;color:var(--ink-2)}
 .faq .a code{font-family:var(--mono);font-size:12.5px;background:#f2f4f8;border:1px solid #e7eaf0;padding:1px 5px;border-radius:5px}
 
-/* CTA + 页脚 */
+/* ==========================================================================
+   10. CTA + 页脚
+   ========================================================================== */
 .cta{
-  position:relative;overflow:hidden;background:var(--ink);color:#eaf0f8;
-  padding:clamp(72px,9vw,110px) 0;text-align:center;
+  position:relative;overflow:hidden;color:var(--night-ink);
+  background:
+    radial-gradient(720px 380px at 50% 0%,rgba(47,230,176,.18),transparent 64%),
+    linear-gradient(180deg,#0a0c11,#08090d);
+  padding:clamp(76px,9vw,116px) 0;text-align:center;
 }
 .cta::before{
-  content:"";position:absolute;inset:0;pointer-events:none;
-  background:radial-gradient(640px 340px at 50% 0%,rgba(74,222,158,.18),transparent 65%);
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+  background-image:
+    linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);
+  background-size:72px 72px;
+  -webkit-mask-image:radial-gradient(80% 70% at 50% 0%,#000 10%,transparent 74%);
+  mask-image:radial-gradient(80% 70% at 50% 0%,#000 10%,transparent 74%);
 }
 .cta-in{position:relative;z-index:2}
-.cta h2{font-size:clamp(26px,3.4vw,40px);letter-spacing:-.02em;line-height:1.25}
-.cta p{margin:16px auto 0;max-width:34em;color:var(--muted-dark);font-size:15px;line-height:1.8}
-.cta .hero-actions{justify-content:center}
-.cta small{display:block;margin-top:22px;font-size:12px;color:rgba(226,234,246,.4)}
+.cta h2{font-size:clamp(28px,3.8vw,46px);letter-spacing:-.024em;line-height:1.16;font-weight:700}
+.cta p{margin:18px auto 0;max-width:34em;color:var(--night-ink-2);font-size:15.5px;line-height:1.8}
+.cta .hero-actions{justify-content:center;margin-top:34px}
+.cta small{display:block;margin-top:26px;font-size:12px;color:rgba(226,234,246,.4);letter-spacing:.02em}
 
-.foot{background:#060910;color:#8e99ac;padding:44px 0 52px;border-top:1px solid rgba(255,255,255,.07)}
+.foot{background:#08090d;color:#8e99ac;padding:48px 0 54px;border-top:1px solid rgba(255,255,255,.07)}
 .foot-in{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
 .foot .brand{color:#e8eef7}
-.foot p{margin-top:10px;font-size:12.5px;line-height:1.8;max-width:40em}
+.foot p{margin-top:11px;font-size:12.5px;line-height:1.8;max-width:40em}
 .foot-links{margin-left:auto;display:flex;flex-wrap:wrap;gap:10px 22px;font-size:13px}
-.foot-links a{opacity:.8;transition:opacity .2s,color .2s}
-.foot-links a:hover{opacity:1;color:var(--mint)}
+.foot-links a{opacity:.78;transition:opacity .2s,color .2s}
+.foot-links a:hover{opacity:1;color:var(--accent)}
 .foot-bottom{
-  margin-top:30px;padding-top:18px;border-top:1px solid rgba(255,255,255,.07);
+  margin-top:32px;padding-top:20px;border-top:1px solid rgba(255,255,255,.07);
   display:flex;flex-wrap:wrap;gap:10px 18px;font-size:11.5px;color:#66718a;
 }
 
 /* Toast */
 .toast{
   position:fixed;left:50%;bottom:32px;transform:translate(-50%,14px);
-  background:#0d1322;color:#dce6f3;border:1px solid rgba(255,255,255,.14);
-  padding:10px 16px;border-radius:10px;font-size:13px;
+  background:rgba(20,24,34,.94);color:#e4ecf6;border:1px solid rgba(255,255,255,.14);
+  padding:10px 18px;border-radius:999px;font-size:13px;
   box-shadow:0 18px 40px -18px #000;opacity:0;pointer-events:none;
-  transition:opacity .22s,transform .22s;z-index:80;
+  transition:opacity .22s,transform .22s;z-index:90;
 }
 .toast.show{opacity:1;transform:translate(-50%,0)}
 
 /* 出现动画 */
-html.js .reveal{opacity:0;transform:translateY(18px);transition:opacity .6s cubic-bezier(.2,.7,.2,1),transform .6s cubic-bezier(.2,.7,.2,1)}
+html.js .reveal{opacity:0;transform:translateY(20px);transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}
 html.js .reveal.in,html:not(.js) .reveal{opacity:1;transform:none}
 
-/* ============ 响应式 ============ */
-@media (max-width:980px){
-  .hero-in{grid-template-columns:minmax(0,1fr);gap:44px}
-  .hero{padding-top:110px}
-  .stage{max-width:560px}
-  .feature-grid{grid-template-columns:repeat(2,1fr)}
-  .shots{grid-template-columns:1fr}
+/* ==========================================================================
+   11. 响应式
+   ========================================================================== */
+@media (max-width:1040px){
+  .hero-in{grid-template-columns:minmax(0,1fr);gap:52px}
+  .hero{padding-top:calc(var(--nav-h) + 52px)}
+  .stage{max-width:460px}
+  .feat--half,.feat--third,.feat--full{grid-column:span 6}
+  .feat--full{grid-template-columns:minmax(0,1fr);gap:24px}
+  .show-grid{grid-template-columns:1fr 1fr}
+  .shot--wide,.shot--wide2{grid-column:span 2}
   .dl-grid{grid-template-columns:1fr}
-  .stats{grid-template-columns:repeat(2,1fr);gap:18px 0}
-  .stats > div:nth-child(3){padding-left:0;border-left:none}
+  .dl .desc{min-height:0}
+}
+@media (max-width:940px){
+  .nav-links{display:none}
+  .nav-cta{margin-left:auto}
+}
+@media (max-width:860px){
+  .install-grid{grid-template-columns:1fr}
+  .show-grid{grid-template-columns:1fr}
+  .shot--wide,.shot--wide2{grid-column:span 1}
+  .src-strip{flex-wrap:wrap}
+  .src-strip .btn{margin-left:0}
 }
 @media (max-width:720px){
-  .container{width:min(1160px,100% - 32px)}
-  .nav-links{display:none}
-  .nav-in{height:60px}
-  .nav-cta{margin-left:auto}
-  .hero h1{font-size:clamp(32px,9vw,42px)}
+  :root{--nav-h:58px}
+  .container{width:min(1140px,100% - 32px)}
+  .hero h1{font-size:clamp(30px,8.6vw,40px)}
   .hero p.sub{font-size:15px}
-  .feature-grid,.install-grid{grid-template-columns:1fr}
-  .panel{margin-left:0}
-  .pub-row .addr{font-size:20px}
+  .hero-actions .btn{width:100%}
+  .stats{grid-template-columns:1fr 1fr;gap:20px 0}
+  .stats > div:nth-child(3){padding-left:0;border-left:none}
+  .bento{gap:16px}
+  .feat{padding:24px 20px 22px}
+  .mini-pub .v{font-size:15px}
   .foot-links{margin-left:0}
   .cta .hero-actions .btn{width:100%}
+  .shot{padding:10px}
 }
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
   .reveal{opacity:1;transform:none;transition:none}
-  .btn,.card,.shot,.dl{transition:none}
+  .btn,.feat,.shot,.dl{transition:none}
 }
 </style>
 <script>document.documentElement.className+=' js';</script>
@@ -446,7 +642,11 @@ html.js .reveal.in,html:not(.js) .reveal{opacity:1;transform:none}
       <a href="#interface">界面</a>
       <a href="#install">安装</a>
       <a href="#download">下载</a>
+      <a href="#changelog">更新日志</a>
       <a href="#faq">常见问题</a>
+      <a class="ext" href="https://github.com/andli0626/ipmenu-bar" target="_blank" rel="noopener">源码
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg>
+      </a>
     </nav>
     <a class="nav-cta" href="#download">
       立即下载
@@ -463,62 +663,57 @@ html.js .reveal.in,html:not(.js) .reveal{opacity:1;transform:none}
       <div class="hero-in">
         <div>
           <span class="eyebrow"><i class="dot"></i>v1.2.5 已发布 · 2026-11-19</span>
-          <h1>IP 地址，<br><span class="hl">抬眼就能看见。</span></h1>
+          <h1>你的公网 IP，<br><span class="hl">抬眼就能看见。</span></h1>
           <p class="sub">常驻 macOS 菜单栏与 Windows 通知区域的小工具。公网地址一眼可见，本地网卡一键复制，左键刷新、开机自启。Tauri 2 + Rust 打成通用二进制，不装运行时，也不占 Dock。</p>
           <div class="hero-actions">
             <a class="btn btn-primary" href="downloads/IPMenuBar_1.2.5_macos-universal.dmg" download>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4"/><path d="M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>
-              下载 macOS 版 <span style="font-weight:500;opacity:.65">· 8.09 MB</span>
+              下载 macOS 版 <span class="btn-note">· 8.09 MB</span>
             </a>
             <a class="btn btn-ghost" href="downloads/IPMenuBar_1.2.5_windows-x64-setup.exe" download>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4"/><path d="M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>
-              下载 Windows 版 <span style="font-weight:500;opacity:.55">· 2.66 MB</span>
+              下载 Windows 版 <span class="btn-note">· 2.66 MB</span>
             </a>
           </div>
           <div class="hero-meta">
-            <span><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>macOS arm64 + x64 通用</span>
-            <span><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>Windows x64 · setup.exe 免管理员</span>
-            <span><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>无需账号与授权</span>
+            <span><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>macOS arm64 + x64 通用</span>
+            <span><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Windows x64 · setup.exe 免管理员</span>
+            <span><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>无需账号与授权</span>
           </div>
+          <a class="src-link" href="https://github.com/andli0626/ipmenu-bar" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 8-4 4 4 4M15 8l4 4-4 4"/></svg>
+            查看源码 · MIT<span class="arw">→</span>
+          </a>
         </div>
 
+        <!-- 一台迷你 macOS：菜单栏常驻 IP + 应用窗口 -->
         <div class="stage" aria-hidden="true">
-          <span class="stage-tag">界面示意</span>
-          <div class="menubar">
-            <div class="mb-brand">
-              <img src="assets/icon.png" alt="">
-              <span>IPMenuBar</span>
-            </div>
-            <div class="mb-right">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M3 9a15 15 0 0 1 18 0"/><path d="M6.5 12.5a10 10 0 0 1 11 0"/><path d="M10 16a5 5 0 0 1 4 0"/><circle cx="12" cy="19.5" r=".8"/></svg>
-              <span class="ip-pill"><i></i>203.0.113.42</span>
-            </div>
-          </div>
-
-          <div class="panel">
-            <div class="panel-label"><span>公网 IP</span><em>ipify · IPv4</em></div>
-            <div class="pub-row">
-              <span class="addr">203.0.113.42</span>
-              <span class="chip">
-                <svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
-                复制
+          <div class="screen">
+            <div class="mb-bar">
+              <span class="mb-app">
+                <img src="assets/icon.png" alt="">
+                <span>IPMenuBar</span>
+              </span>
+              <span class="mb-right">
+                <span class="mb-extra"><span class="ip">172.20.244.219</span></span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9a15 15 0 0 1 18 0"/><path d="M6.5 12.5a10 10 0 0 1 11 0"/><path d="M10 16a5 5 0 0 1 4 0"/><circle cx="12" cy="19.5" r=".8" fill="currentColor"/></svg>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="8" width="16" height="9" rx="2.5"/><path d="M21 11v3"/><rect x="4" y="10" width="11" height="5" rx="1" fill="currentColor" stroke="none"/></svg>
+                <span class="clock">11:12</span>
               </span>
             </div>
-            <div class="local-head"><span>本地 IP</span><span>6 个接口</span></div>
-            <div class="local-row">
-              <span class="iface">en0</span><span class="addr">192.168.1.24</span><span class="chip-mini">复制</span>
+            <div class="screen-wall">
+              <div class="win">
+                <div class="win-bar">
+                  <span class="lights"><b></b><b></b><b></b></span>
+                  <span class="win-title">ip 地址</span>
+                </div>
+                <div class="win-body">
+                  <img src="assets/app-window.png" alt="">
+                </div>
+              </div>
             </div>
-            <div class="local-row">
-              <span class="iface">utun4</span><span class="addr">198.18.0.1</span><span class="chip-mini">复制</span>
-            </div>
-            <div class="local-row">
-              <span class="iface">bridge100</span><span class="addr">192.168.139.3</span><span class="chip-mini">复制</span>
-            </div>
-            <div class="local-row">
-              <span class="iface">en0 · IPv6</span><span class="addr">fd07:b51a:…:e9f1</span><span class="chip-mini">复制</span>
-            </div>
-            <div class="panel-foot"><span>左键托盘图标刷新</span><span>每行独立复制</span></div>
           </div>
+          <p class="stage-note">真实界面截图 · macOS 菜单栏与 IP 窗口</p>
         </div>
       </div>
 
@@ -540,77 +735,137 @@ html.js .reveal.in,html:not(.js) .reveal{opacity:1;transform:none}
         <p>不追求功能完整，只把「查 IP」这一件事做到不用切窗口、不用打开网页、不用记命令。</p>
       </div>
 
-      <div class="feature-grid">
-        <article class="card reveal">
-          <div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18"/></svg></div>
+      <div class="bento">
+        <article class="feat feat--half reveal">
+          <div class="feat__top">
+            <span class="feat__no">01</span>
+            <div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18"/></svg></div>
+          </div>
           <h3>公网 IP，一眼可见</h3>
           <p>启动时向 ipify 取回公网地址，直接写在菜单栏标题或浮窗上。IPv4 优先，网络支持时同时给出 IPv6。</p>
-          <div class="tagline">api64.ipify.org</div>
+          <div class="mini">
+            <div class="mini-label">公网 IP · IPv4</div>
+            <div class="mini-pub">
+              <span class="v">153.37.197.221</span>
+              <span class="mini-chip">
+                <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+                复制
+              </span>
+            </div>
+            <div class="mini-row"><span class="if">IPv6</span><span class="ip">fd07:b51a:…:e9f1</span></div>
+            <div class="mini-div">api64.ipify.org · 无账号 · 无上报</div>
+          </div>
         </article>
 
-        <article class="card reveal">
-          <div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/></svg></div>
+        <article class="feat feat--half reveal">
+          <div class="feat__top">
+            <span class="feat__no">02</span>
+            <div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/></svg></div>
+          </div>
           <h3>本地网卡全列出</h3>
           <p>枚举 en0、utun、bridge 等接口，物理网卡与虚拟网卡分开认，IPv4 / IPv6 各占一行，不再靠 <code>ifconfig</code> 翻。</p>
-          <div class="tagline">if-addrs · 逐接口列举</div>
+          <div class="mini">
+            <div class="mini-label">本地 IP</div>
+            <div class="mini-row"><span class="if">en0</span><span class="ip">172.20.244.219</span></div>
+            <div class="mini-row"><span class="if">utun1024</span><span class="ip">198.18.0.1</span></div>
+            <div class="mini-row"><span class="if">bridge100</span><span class="ip">192.168.139.3</span></div>
+            <div class="mini-div">if-addrs · 逐接口枚举</div>
+          </div>
         </article>
 
-        <article class="card reveal">
-          <div class="icon"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></div>
+        <article class="feat feat--third reveal">
+          <div class="feat__top">
+            <span class="feat__no">03</span>
+            <div class="icon"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></div>
+          </div>
           <h3>点一下复制</h3>
           <p>公网与本地每一行都带独立的「复制」按钮，拷进终端、工单、聊天框都不用重新选中，也不会复制错行。</p>
           <div class="tagline">原生剪贴板插件</div>
         </article>
 
-        <article class="card reveal">
-          <div class="icon"><svg viewBox="0 0 24 24"><path d="M4 17h16"/><path d="M7 17V9a5 5 0 0 1 10 0v8"/><path d="M12 4v2"/></svg></div>
+        <article class="feat feat--third reveal">
+          <div class="feat__top">
+            <span class="feat__no">04</span>
+            <div class="icon"><svg viewBox="0 0 24 24"><path d="M4 17h16"/><path d="M7 17V9a5 5 0 0 1 10 0v8"/><path d="M12 4v2"/></svg></div>
+          </div>
           <h3>托盘原生，不占 Dock</h3>
           <p>macOS 以 Accessory 模式运行：没有 Dock 图标、没有常驻主窗口，菜单栏里只留一行 IP。</p>
           <div class="tagline">Tauri tray-icon</div>
         </article>
 
-        <article class="card reveal">
-          <div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="14" height="10" rx="2"/><path d="M17 9h3a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-3"/></svg></div>
-          <h3>Windows 常驻浮窗</h3>
-          <p>通知区域不支持在图标旁显示文字，于是改用右下角小窗：可拖动、点击复制、点「×」收起，左键托盘图标随时唤回。</p>
-          <div class="tagline">pill window · 仅 Windows</div>
-        </article>
-
-        <article class="card reveal">
-          <div class="icon"><svg viewBox="0 0 24 24"><path d="M12 3v3"/><path d="M12 18v3"/><circle cx="12" cy="12" r="5"/><path d="M4 12h3M17 12h3"/></svg></div>
+        <article class="feat feat--third reveal">
+          <div class="feat__top">
+            <span class="feat__no">05</span>
+            <div class="icon"><svg viewBox="0 0 24 24"><path d="M12 3v3"/><path d="M12 18v3"/><circle cx="12" cy="12" r="5"/><path d="M4 12h3M17 12h3"/></svg></div>
+          </div>
           <h3>即时刷新与开机自启</h3>
           <p>左键点托盘图标立即重查公网 IP，不等缓存；托盘菜单勾选「开机启动」后随登录静默驻留。</p>
           <div class="tagline">autostart · 无轮询</div>
         </article>
+
+        <article class="feat feat--full reveal">
+          <div>
+            <div class="feat__top">
+              <span class="feat__no">06</span>
+              <div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="14" height="10" rx="2"/><path d="M17 9h3a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-3"/></svg></div>
+            </div>
+            <h3>Windows 常驻浮窗</h3>
+            <p>通知区域不支持在图标旁显示文字，于是改用右下角小窗：可拖动、点击复制、点「×」收起，左键托盘图标随时唤回。浮窗已改为不透明窗口，在真机验证过定位与渲染，不会被背景穿透。</p>
+            <div class="tagline">pill window · 仅 Windows</div>
+          </div>
+          <div class="pill-win">
+            <div class="pw-bar">
+              <span>ip 地址</span>
+              <i>×</i>
+            </div>
+            <div class="pw-body">
+              <div class="pw-row"><span class="v">153.37.197.221</span></div>
+              <div class="pw-foot">右下角常驻 · 可拖动 · 点击复制</div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div class="src-strip reveal">
+        <div class="icon"><svg viewBox="0 0 24 24"><path d="m9 8-4 4 4 4M15 8l4 4-4 4"/></svg></div>
+        <div class="txt">
+          <b>源码开放 · MIT 许可</b>
+          <p>Tauri 2 + Rust，托盘、浮窗与 IP 获取分在 <code>src-tauri/src</code> 下；改完提交、打个 tag，GitHub Actions 就会重新出两端的包。</p>
+        </div>
+        <a class="btn btn-outline btn-sm" href="https://github.com/andli0626/ipmenu-bar" target="_blank" rel="noopener">在 GitHub 查看源码 ↗</a>
       </div>
     </div>
   </section>
 
-  <!-- ============ 界面 ============ -->
-  <section class="section alt" id="interface">
+  <!-- ============ 界面（深色带） ============ -->
+  <section class="section showcase" id="interface">
     <div class="container">
       <div class="head reveal">
         <span class="kicker">Interface</span>
-        <h2>两个界面，<br>一个查 IP，一个看全部</h2>
-        <p>菜单栏只负责「瞥一眼」，托盘菜单负责「动手」，主窗口才是完整的地址清单。</p>
+        <h2>菜单栏一行，<br>点开是一整套</h2>
+        <p>菜单栏只负责「瞥一眼」，托盘菜单负责「动手」，IP 窗口才是完整的地址清单。以下均为真机截图。</p>
       </div>
 
-      <div class="shots">
-        <figure class="shot tall reveal">
-          <div class="shot-frame"><img src="assets/screenshot-window.png" alt="IPMenuBar 主窗口：公网 IP 与本地网卡列表" loading="lazy"></div>
-          <figcaption><b>IP 窗口</b>：公网 IP 置顶，本地网卡逐行列出接口名与地址，每行右侧一个复制按钮。</figcaption>
+      <div class="show-grid">
+        <figure class="shot shot--wide shot--menu reveal">
+          <div class="shot-frame"><img src="assets/menubar-full.png" alt="macOS 菜单栏右侧常驻显示 IPMenuBar 的公网 IP"></div>
+          <figcaption><b>菜单栏常驻</b>：应用以 Accessory 模式运行，菜单栏右侧常驻显示当前公网 IP，左键点击即可刷新。</figcaption>
         </figure>
 
-        <div>
-          <figure class="shot reveal">
-            <div class="shot-frame"><img src="assets/screenshot-tray.png" alt="IPMenuBar 托盘菜单与本地 IP 子菜单" loading="lazy"></div>
-            <figcaption><b>托盘菜单</b>：公网 IP / 本地 IP 子菜单、复制当前 IP、显示 IP 窗口、关于、开机启动、退出。</figcaption>
-          </figure>
-          <div class="note-lite reveal">
-            <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v.01M12 11v5"/></svg>
-            <span>两套形态共用同一份数据：主窗口改了刷新结果，菜单栏与浮窗同步更新。</span>
-          </div>
-        </div>
+        <figure class="shot reveal">
+          <div class="shot-frame"><img src="assets/tray-menu.png" alt="IPMenuBar 托盘菜单"></div>
+          <figcaption><b>托盘菜单</b>：公网 IP / 本地 IP 子菜单、复制当前 IP、显示 IP 窗口、关于、开机启动、退出。</figcaption>
+        </figure>
+
+        <figure class="shot shot--wide2 reveal">
+          <div class="shot-frame"><img src="assets/tray-submenu.png" alt="IPMenuBar 本地 IP 子菜单列表"></div>
+          <figcaption><b>本地 IP 子菜单</b>：展开后逐条列出每个接口的地址，点任意一条即可复制；主窗口与浮窗共用同一份数据，改一处即处处同步。</figcaption>
+        </figure>
+      </div>
+
+      <div class="note-lite reveal">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v.01M12 11v5"/></svg>
+        <span>三套形态共用同一份数据：主窗口刷新了结果，菜单栏与浮窗同步更新。</span>
       </div>
     </div>
   </section>
@@ -627,7 +882,7 @@ html.js .reveal.in,html:not(.js) .reveal{opacity:1;transform:none}
       <div class="install-grid">
         <div class="os-card reveal">
           <div class="os-head">
-            <svg viewBox="0 0 24 24"><path d="M16 3c-1.2.4-2.2 1-2.4 2.4-.9.3-1.7 1.4-1.6 2.6-1.4.1 1.3-.8 2.6-2 3.1"/><path d="M16 8.9c2.4.1 4.3 1.6 4.3 4.4-1.4 1.2-1.6 3-1.1 4.1-.8 1.2-2.3 2.4-3.6 2.4-1 0-1.5-.6-2.7-.6s-1.8.6-2.7.6c-1.4 0-3.2-1.5-4-3.2-.8-1.6-.4-4.3 1.2-5.6.9-.7 2-.9 2.8-.6.7-.3 1.2-.5 2-.5"/></svg>
+            <div class="icon"><svg viewBox="0 0 24 24"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.53 4.09z"/><path d="M12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg></div>
             <h3>macOS</h3>
             <span>universal · arm64 + x64</span>
           </div>
@@ -641,7 +896,7 @@ html.js .reveal.in,html:not(.js) .reveal{opacity:1;transform:none}
 
         <div class="os-card reveal">
           <div class="os-head">
-            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            <div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
             <h3>Windows</h3>
             <span>x64 · nsis + msi</span>
           </div>
@@ -670,7 +925,7 @@ html.js .reveal.in,html:not(.js) .reveal{opacity:1;transform:none}
       <div class="head reveal">
         <span class="kicker">Download</span>
         <h2>下载 v1.2.5</h2>
-        <p>三个安装包都放在本站 <code style="font-family:var(--mono);background:#fff;border:1px solid var(--line);padding:1px 5px;border-radius:5px">downloads/</code> 目录下，同源直链，不经过第三方 CDN。每个文件附完整 SHA256，可下载后自校验。</p>
+        <p>三个安装包都放在本站 <code>downloads/</code> 目录下，同源直链，不经过第三方 CDN。每个文件附完整 SHA256，可下载后自校验。</p>
       </div>
 
       <div class="dl-grid">
@@ -725,8 +980,52 @@ html.js .reveal.in,html:not(.js) .reveal{opacity:1;transform:none}
     </div>
   </section>
 
+  <!-- ============ 更新日志 ============ -->
+  <section class="section" id="changelog">
+    <div class="container">
+      <div class="head reveal">
+        <span class="kicker">Changelog</span>
+        <h2>版本更新</h2>
+        <p>每次发布都可在 GitHub Releases 查到完整提交记录与产物校验值。</p>
+      </div>
+
+      <div class="log">
+        <article class="log-item current reveal">
+          <div class="log-head">
+            <span class="log-ver">v1.2.5</span>
+            <span class="log-date">2026-11-19</span>
+            <span class="badge">当前版本</span>
+          </div>
+          <ul>
+            <li>版本号同步至 v1.2.5，macOS / Windows 三个安装包与 SHA256 校验值一并更新。</li>
+            <li>上线本站产品发布页：零外部依赖、无统计脚本，安装包同源直链下载。</li>
+            <li>补充《多端自动打包实现过程说明》，并在 README 挂出文档入口。</li>
+          </ul>
+        </article>
+
+        <article class="log-item reveal">
+          <div class="log-head">
+            <span class="log-ver">v1.2.4</span>
+            <span class="log-date">2026-11-18</span>
+          </div>
+          <ul>
+            <li>接入 GitHub Actions 多端打包：macOS universal 与 Windows nsis / msi 一键产出。</li>
+            <li>新增 Windows 右下角常驻浮窗，补齐通知区域无法显示文字的短板。</li>
+            <li>Windows 浮窗改为不透明窗口，并在真机验证定位与渲染。</li>
+            <li>MSI 改用 zh-CN 代码页，修复打包失败（LGHT0311）。</li>
+            <li>发版流程重构为 build → release，失败时不产生半成品发布。</li>
+          </ul>
+        </article>
+      </div>
+
+      <p class="log-more reveal">
+        更早的版本记录见 <a href="https://github.com/andli0626/ipmenu-bar/releases" target="_blank" rel="noopener">GitHub Releases</a>。
+      </p>
+    </div>
+  </section>
+
   <!-- ============ FAQ ============ -->
-  <section class="section" id="faq">
+  <section class="section alt" id="faq">
     <div class="container">
       <div class="head reveal">
         <span class="kicker">FAQ</span>
@@ -771,6 +1070,7 @@ html.js .reveal.in,html:not(.js) .reveal{opacity:1;transform:none}
       <div class="hero-actions">
         <a class="btn btn-primary" href="downloads/IPMenuBar_1.2.5_macos-universal.dmg" download>下载 macOS 版</a>
         <a class="btn btn-ghost" href="downloads/IPMenuBar_1.2.5_windows-x64-setup.exe" download>下载 Windows 版</a>
+        <a class="btn btn-ghost" href="https://github.com/andli0626/ipmenu-bar" target="_blank" rel="noopener">查看源码 ↗</a>
       </div>
       <small>v1.2.5 · 2026-11-19 · MIT License</small>
     </div>
@@ -809,7 +1109,10 @@ html.js .reveal.in,html:not(.js) .reveal{opacity:1;transform:none}
 (function(){
   var nav=document.getElementById('nav');
   var bar=document.getElementById('bar');
-  var links=[].slice.call(document.querySelectorAll('.nav-links a'));
+  // 只把站内锚点纳入滚动高亮，外链不参与
+  var links=[].slice.call(document.querySelectorAll('.nav-links a')).filter(function(a){
+    return (a.getAttribute('href')||'').charAt(0)==='#';
+  });
   var sections=links.map(function(a){return document.querySelector(a.getAttribute('href'));});
   var toast=document.getElementById('toast');
   var toastTimer=null;
@@ -824,7 +1127,7 @@ html.js .reveal.in,html:not(.js) .reveal{opacity:1;transform:none}
     sections.forEach(function(sec,i){
       if(!sec)return;
       var top=sec.getBoundingClientRect().top;
-      if(top<=120)active=i;
+      if(top<=140)active=i;
     });
     links.forEach(function(a,i){a.classList.toggle('active',i===active);});
   }
